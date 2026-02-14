@@ -87,7 +87,11 @@ class Thread:
         input: Input,  # noqa: A002
         **turn_options: Unpack[TurnOptions],
     ) -> RunStreamedResult:
-        """Provide input to the agent and stream turn events as they are produced."""
+        """Provide input to the agent and stream turn events as they are produced.
+
+        Set `turn_options["signal"]` via `event.set()` to request cancellation.
+        Use `threading.Event` in synchronous flows.
+        """
         _ = (input, turn_options)
         raise NotImplementedError
 
@@ -96,7 +100,11 @@ class Thread:
         input: Input,  # noqa: A002
         **turn_options: Unpack[TurnOptions],
     ) -> RunResult:
-        """Provide input to the agent and return the completed turn."""
+        """Provide input to the agent and return the completed turn.
+
+        Set `turn_options["signal"]` via `event.set()` to request cancellation.
+        Use `threading.Event` in synchronous flows.
+        """
         _ = (input, turn_options)
         raise NotImplementedError
 
@@ -129,7 +137,11 @@ class AsyncThread:
         input: Input,  # noqa: A002
         **turn_options: Unpack[TurnOptions],
     ) -> AsyncRunStreamedResult:
-        """Provide input to the agent and stream turn events as they are produced."""
+        """Provide input to the agent and stream turn events as they are produced.
+
+        Set `turn_options["signal"]` via `event.set()` to request cancellation.
+        Use `asyncio.Event` in asynchronous flows.
+        """
         _ = (input, turn_options)
         raise NotImplementedError
 
@@ -138,6 +150,10 @@ class AsyncThread:
         input: Input,  # noqa: A002
         **turn_options: Unpack[TurnOptions],
     ) -> RunResult:
-        """Provide input to the agent and return the completed turn."""
+        """Provide input to the agent and return the completed turn.
+
+        Set `turn_options["signal"]` via `event.set()` to request cancellation.
+        Use `asyncio.Event` in asynchronous flows.
+        """
         _ = (input, turn_options)
         raise NotImplementedError

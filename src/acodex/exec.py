@@ -5,12 +5,19 @@ from typing import TYPE_CHECKING, TypedDict
 
 from acodex.codex_options import CodexConfigObject
 from acodex.thread_options import ApprovalMode, ModelReasoningEffort, SandboxMode, WebSearchMode
+from acodex.turn_options import TurnSignal
 
 if TYPE_CHECKING:
     from typing_extensions import NotRequired
 
 
 class CodexExecArgs(TypedDict):
+    """Arguments for the exec layer.
+
+    Set `signal` via `event.set()` to request cancellation. Use `threading.Event` in synchronous
+    flows and `asyncio.Event` in asynchronous flows.
+    """
+
     input: str
     base_url: NotRequired[str]
     api_key: NotRequired[str]
@@ -23,7 +30,7 @@ class CodexExecArgs(TypedDict):
     skip_git_repo_check: NotRequired[bool]
     output_schema_file: NotRequired[str]
     model_reasoning_effort: NotRequired[ModelReasoningEffort]
-    signal: NotRequired[object]  # Placeholder for AbortSignal type
+    signal: NotRequired[TurnSignal]
     network_access_enabled: NotRequired[bool]
     web_search_mode: NotRequired[WebSearchMode]
     web_search_enabled: NotRequired[bool]

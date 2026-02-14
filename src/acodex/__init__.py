@@ -48,7 +48,7 @@ from acodex.thread_options import (
     ThreadOptions,
     WebSearchMode,
 )
-from acodex.turn_options import TurnOptions
+from acodex.turn_options import TurnOptions, TurnSignal
 
 __all__ = [
     "AgentMessageItem",
@@ -88,6 +88,7 @@ __all__ = [
     "TurnCompletedEvent",
     "TurnFailedEvent",
     "TurnOptions",
+    "TurnSignal",
     "TurnStartedEvent",
     "Usage",
     "UserInput",
