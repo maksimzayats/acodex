@@ -100,3 +100,10 @@ testing standards. Prefer uv for all tooling.
 - Do not add new lint ignores without justification.
 - Preserve existing formatting and file organization.
 - Update or add tests whenever behavior changes.
+
+## SDK parity notes (important)
+
+- For TS-SDK-shaped Python surface areas, use `TypedDict` for input-only option/argument payloads passed into methods (for example: `CodexOptions`, `ThreadOptions`, `TurnOptions`, `CodexExecArgs`, and input unions).
+- For return/event/item payload models, prefer `@dataclass(frozen=True, slots=True)` instead of `TypedDict`.
+- Keep discriminant `type` values as typed `Literal[...]` fields on return dataclasses (typically fixed defaults, non-init).
+- Keep public API method names and option keys snake_case only; do not add camelCase aliases unless explicitly requested.
