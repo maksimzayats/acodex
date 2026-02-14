@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Iterator
 from typing import TYPE_CHECKING, TypedDict
 
+from acodex.codex_options import CodexConfigObject
 from acodex.thread_options import ApprovalMode, ModelReasoningEffort, SandboxMode, WebSearchMode
 
 if TYPE_CHECKING:
@@ -26,3 +28,41 @@ class CodexExecArgs(TypedDict):
     web_search_mode: NotRequired[WebSearchMode]
     web_search_enabled: NotRequired[bool]
     approval_policy: NotRequired[ApprovalMode]
+
+
+class CodexExec:
+    """Execute `codex exec` calls for the synchronous client."""
+
+    def __init__(
+        self,
+        executable_path: str | None = None,
+        env: dict[str, str] | None = None,
+        config_overrides: CodexConfigObject | None = None,
+    ) -> None:
+        self._executable_path = executable_path
+        self._env = env
+        self._config_overrides = config_overrides
+
+    def run(self, args: CodexExecArgs) -> Iterator[str]:
+        """Run Codex and stream JSONL lines."""
+        _ = args
+        raise NotImplementedError
+
+
+class AsyncCodexExec:
+    """Execute `codex exec` calls for the asynchronous client."""
+
+    def __init__(
+        self,
+        executable_path: str | None = None,
+        env: dict[str, str] | None = None,
+        config_overrides: CodexConfigObject | None = None,
+    ) -> None:
+        self._executable_path = executable_path
+        self._env = env
+        self._config_overrides = config_overrides
+
+    async def run(self, args: CodexExecArgs) -> AsyncIterator[str]:
+        """Run Codex and stream JSONL lines asynchronously."""
+        _ = args
+        raise NotImplementedError
