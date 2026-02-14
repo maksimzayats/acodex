@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, TypeAlias, TypedDict
-
-if TYPE_CHECKING:
-    from typing_extensions import NotRequired
+from dataclasses import dataclass, field
+from typing import Literal, TypeAlias
 
 CommandExecutionStatus: TypeAlias = Literal["in_progress", "completed", "failed"]
 PatchChangeKind: TypeAlias = Literal["add", "delete", "update"]
@@ -11,104 +9,116 @@ PatchApplyStatus: TypeAlias = Literal["completed", "failed"]
 McpToolCallStatus: TypeAlias = Literal["in_progress", "completed", "failed"]
 
 
-class CommandExecutionItem(TypedDict):
+@dataclass(frozen=True, slots=True)
+class CommandExecutionItem:
     """A command executed by the agent."""
 
     id: str
-    type: Literal["command_execution"]
     command: str
     aggregated_output: str
-    exit_code: NotRequired[int]
     status: CommandExecutionStatus
+    exit_code: int | None = None
+    type: Literal["command_execution"] = field(default="command_execution", init=False)
 
 
-class FileUpdateChange(TypedDict):
+@dataclass(frozen=True, slots=True)
+class FileUpdateChange:
     """A file update included in a patch operation."""
 
     path: str
     kind: PatchChangeKind
 
 
-class FileChangeItem(TypedDict):
+@dataclass(frozen=True, slots=True)
+class FileChangeItem:
     """A set of file changes by the agent."""
 
     id: str
-    type: Literal["file_change"]
     changes: list[FileUpdateChange]
     status: PatchApplyStatus
+    type: Literal["file_change"] = field(default="file_change", init=False)
 
 
-class McpToolCallResult(TypedDict):
+@dataclass(frozen=True, slots=True)
+class McpToolCallResult:
     """Result payload returned by an MCP server."""
 
     content: list[object]
     structured_content: object
 
 
-class McpToolCallError(TypedDict):
+@dataclass(frozen=True, slots=True)
+class McpToolCallError:
     """Error payload returned for a failed MCP call."""
 
     message: str
 
 
-class McpToolCallItem(TypedDict):
+@dataclass(frozen=True, slots=True)
+class McpToolCallItem:
     """Represents a call to an MCP tool."""
 
     id: str
-    type: Literal["mcp_tool_call"]
     server: str
     tool: str
     arguments: object
-    result: NotRequired[McpToolCallResult]
-    error: NotRequired[McpToolCallError]
     status: McpToolCallStatus
+    result: McpToolCallResult | None = None
+    error: McpToolCallError | None = None
+    type: Literal["mcp_tool_call"] = field(default="mcp_tool_call", init=False)
 
 
-class AgentMessageItem(TypedDict):
+@dataclass(frozen=True, slots=True)
+class AgentMessageItem:
     """Response from the agent."""
 
     id: str
-    type: Literal["agent_message"]
     text: str
+    type: Literal["agent_message"] = field(default="agent_message", init=False)
 
 
-class ReasoningItem(TypedDict):
+@dataclass(frozen=True, slots=True)
+class ReasoningItem:
     """Agent's reasoning summary."""
 
     id: str
-    type: Literal["reasoning"]
     text: str
+    type: Literal["reasoning"] = field(default="reasoning", init=False)
 
 
-class WebSearchItem(TypedDict):
+@dataclass(frozen=True, slots=True)
+class WebSearchItem:
     """Captures a web search request."""
 
     id: str
-    type: Literal["web_search"]
     query: str
+    type: Literal["web_search"] = field(default="web_search", init=False)
 
 
-class ErrorItem(TypedDict):
+@dataclass(frozen=True, slots=True)
+class ErrorItem:
     """Describes a non-fatal error surfaced as an item."""
 
     id: str
-    type: Literal["error"]
     message: str
+    type: Literal["error"] = field(default="error", init=False)
 
 
-class TodoItem(TypedDict):
+@dataclass(frozen=True, slots=True)
+class TodoItem:
     """An item in the agent's to-do list."""
 
     text: str
     completed: bool
 
 
-class TodoListItem(TypedDict):
+@dataclass(frozen=True, slots=True)
+class TodoListItem:
     """Tracks the agent's running to-do list."""
 
     id: str
-    type: Literal["todo_list"]
     items: list[TodoItem]
+    type: Literal["todo_list"] = field(default="todo_list", init=False)
 
 
 ThreadItem: TypeAlias = (

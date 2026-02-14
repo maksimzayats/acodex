@@ -1,24 +1,28 @@
 from __future__ import annotations
 
-from typing import Literal, TypeAlias, TypedDict
+from dataclasses import dataclass, field
+from typing import Literal, TypeAlias
 
 from acodex.items import ThreadItem
 
 
-class ThreadStartedEvent(TypedDict):
+@dataclass(frozen=True, slots=True)
+class ThreadStartedEvent:
     """Emitted when a new thread is started as the first event."""
 
-    type: Literal["thread.started"]
     thread_id: str
+    type: Literal["thread.started"] = field(default="thread.started", init=False)
 
 
-class TurnStartedEvent(TypedDict):
+@dataclass(frozen=True, slots=True)
+class TurnStartedEvent:
     """Emitted when a turn is started by sending a new prompt to the model."""
 
-    type: Literal["turn.started"]
+    type: Literal["turn.started"] = field(default="turn.started", init=False)
 
 
-class Usage(TypedDict):
+@dataclass(frozen=True, slots=True)
+class Usage:
     """Describes the usage of tokens during a turn."""
 
     input_tokens: int
@@ -26,52 +30,59 @@ class Usage(TypedDict):
     output_tokens: int
 
 
-class TurnCompletedEvent(TypedDict):
+@dataclass(frozen=True, slots=True)
+class TurnCompletedEvent:
     """Emitted when a turn is completed."""
 
-    type: Literal["turn.completed"]
     usage: Usage
+    type: Literal["turn.completed"] = field(default="turn.completed", init=False)
 
 
-class ThreadError(TypedDict):
+@dataclass(frozen=True, slots=True)
+class ThreadError:
     """Fatal error emitted by the stream."""
 
     message: str
 
 
-class TurnFailedEvent(TypedDict):
+@dataclass(frozen=True, slots=True)
+class TurnFailedEvent:
     """Indicates that a turn failed with an error."""
 
-    type: Literal["turn.failed"]
     error: ThreadError
+    type: Literal["turn.failed"] = field(default="turn.failed", init=False)
 
 
-class ItemStartedEvent(TypedDict):
+@dataclass(frozen=True, slots=True)
+class ItemStartedEvent:
     """Emitted when a new item is added to the thread."""
 
-    type: Literal["item.started"]
     item: ThreadItem
+    type: Literal["item.started"] = field(default="item.started", init=False)
 
 
-class ItemUpdatedEvent(TypedDict):
+@dataclass(frozen=True, slots=True)
+class ItemUpdatedEvent:
     """Emitted when an item is updated."""
 
-    type: Literal["item.updated"]
     item: ThreadItem
+    type: Literal["item.updated"] = field(default="item.updated", init=False)
 
 
-class ItemCompletedEvent(TypedDict):
+@dataclass(frozen=True, slots=True)
+class ItemCompletedEvent:
     """Signals that an item has reached a terminal state."""
 
-    type: Literal["item.completed"]
     item: ThreadItem
+    type: Literal["item.completed"] = field(default="item.completed", init=False)
 
 
-class ThreadErrorEvent(TypedDict):
+@dataclass(frozen=True, slots=True)
+class ThreadErrorEvent:
     """Represents an unrecoverable error emitted directly by the event stream."""
 
-    type: Literal["error"]
     message: str
+    type: Literal["error"] = field(default="error", init=False)
 
 
 ThreadEvent: TypeAlias = (
