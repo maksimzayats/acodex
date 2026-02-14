@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, TypeAlias, TypedDict
 
 if TYPE_CHECKING:
-    from typing import NotRequired
+    from typing_extensions import NotRequired
 
 # fmt: off
 CodexConfigValue: TypeAlias = str | int | float | bool | list["CodexConfigValue"] | dict[str, "CodexConfigValue"]

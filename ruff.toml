@@ -5,6 +5,7 @@ select = ["ALL"]
 unfixable = ["T201"]
 ignore = [
     # Documentation (pydocstyle)
+    "D101",
     "D100", # Missing docstring in public module
     "D103", # Missing docstring in public function
     "D104", # Missing docstring in public package

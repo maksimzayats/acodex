@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, TypeAlias, TypedDict
 
 if TYPE_CHECKING:
-    from typing import NotRequired
+    from typing_extensions import NotRequired
 
 ApprovalMode: TypeAlias = Literal["never", "on-request", "on-failure", "untrusted"]
 SandboxMode: TypeAlias = Literal["read-only", "workspace-write", "danger-full-access"]

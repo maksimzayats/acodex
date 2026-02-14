@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from acodex.codex_options import CodexOptions
 
 if TYPE_CHECKING:
-    from typing import Unpack
+    from typing_extensions import Unpack
 
 
 class BaseCodex:
