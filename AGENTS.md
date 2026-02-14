@@ -107,3 +107,8 @@ testing standards. Prefer uv for all tooling.
 - For return/event/item payload models, prefer `@dataclass(frozen=True, slots=True)` instead of `TypedDict`.
 - Keep discriminant `type` values as typed `Literal[...]` fields on return dataclasses (typically fixed defaults, non-init).
 - Keep public API method names and option keys snake_case only; do not add camelCase aliases unless explicitly requested.
+- The TypeScript SDK (`_ts_sdk/src`) is the source of truth for features and behavior.
+- Target one-to-one feature parity with the TypeScript SDK for all public APIs.
+- Pythonic deviations are allowed only when explicitly documented in `differences.md`.
+- Before implementing any feature or behavior change, check `differences.md` first and follow existing documented divergences.
+- If a new Pythonic divergence is needed, document it in `differences.md` in the same change.
