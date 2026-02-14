@@ -60,7 +60,10 @@ AsyncRunStreamedResult: TypeAlias = StreamedTurn[AsyncIterator[ThreadEvent]]
 
 
 class Thread:
-    """Represent a thread of conversation with the agent."""
+    """Represent a thread of conversation with the agent.
+
+    One thread can have multiple consecutive turns.
+    """
 
     def __init__(
         self,
@@ -110,7 +113,10 @@ class Thread:
 
 
 class AsyncThread:
-    """Represent a thread of conversation with the agent."""
+    """Represent a thread of conversation with the agent.
+
+    One thread can have multiple consecutive turns.
+    """
 
     def __init__(
         self,

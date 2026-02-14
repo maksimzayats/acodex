@@ -27,11 +27,26 @@ class Codex:
         )
 
     def start_thread(self, **options: Unpack[ThreadOptions]) -> Thread:
-        """Start a new conversation with an agent."""
+        """Start a new conversation with an agent.
+
+        Returns:
+            A new thread instance.
+
+        """
         return Thread(self._exec, self._options, options)
 
     def resume_thread(self, thread_id: str, **options: Unpack[ThreadOptions]) -> Thread:
-        """Resume a conversation with an agent using a thread ID."""
+        """Resume a conversation with an agent using a thread ID.
+
+        Threads are persisted in ``~/.codex/sessions``.
+
+        Args:
+            thread_id: Identifier of the thread to resume.
+
+        Returns:
+            A new thread instance.
+
+        """
         return Thread(
             self._exec,
             self._options,
@@ -56,11 +71,26 @@ class AsyncCodex:
         )
 
     def start_thread(self, **options: Unpack[ThreadOptions]) -> AsyncThread:
-        """Start a new conversation with an agent."""
+        """Start a new conversation with an agent.
+
+        Returns:
+            A new thread instance.
+
+        """
         return AsyncThread(self._exec, self._options, options)
 
     def resume_thread(self, thread_id: str, **options: Unpack[ThreadOptions]) -> AsyncThread:
-        """Resume a conversation with an agent using a thread ID."""
+        """Resume a conversation with an agent using a thread ID.
+
+        Threads are persisted in ``~/.codex/sessions``.
+
+        Args:
+            thread_id: Identifier of the thread to resume.
+
+        Returns:
+            A new thread instance.
+
+        """
         return AsyncThread(
             self._exec,
             self._options,
