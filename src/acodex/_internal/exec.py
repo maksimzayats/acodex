@@ -64,7 +64,7 @@ class CodexExecCLICommandBuilder:
         env_overrides: dict[str, str] | None = None,
     ) -> None:
         self._args = args
-        self._config_overrides = config_overrides or {}
+        self._config_overrides = config_overrides
         self._env_overrides = env_overrides
 
         self._command = CodexExecCommand(argv=[], env={}, stdin="")
@@ -133,7 +133,7 @@ class CodexExecCLICommandBuilder:
         self._command.argv.append("--experimental-json")
 
     def _add_config_overrides(self) -> None:
-        if not self._config_overrides:
+        if self._config_overrides is None:
             return
 
         for override in serialize_config_overrides(self._config_overrides):
