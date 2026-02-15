@@ -5,14 +5,17 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final, TypedDict
 
 from acodex._internal.config import serialize_config_overrides, to_config_value
-from acodex.types.codex_options import CodexConfigObject, CodexConfigValue
+from acodex._internal.thread_core import normalize_input
+from acodex.types.codex_options import CodexConfigObject, CodexConfigValue, CodexOptions
+from acodex.types.input import Input
 from acodex.types.thread_options import (
     ApprovalMode,
     ModelReasoningEffort,
     SandboxMode,
+    ThreadOptions,
     WebSearchMode,
 )
-from acodex.types.turn_options import TurnSignal
+from acodex.types.turn_options import TurnOptions, TurnSignal
 
 if TYPE_CHECKING:
     from typing_extensions import NotRequired
@@ -273,3 +276,40 @@ class CodexExecCLICommandBuilder:
         config_value = to_config_value(value, key)
         self._command.argv.append("--config")
         self._command.argv.append(f"{key}={config_value}")
+
+
+def build_exec_args(  # noqa: PLR0913
+    *,
+    input: Input,  # noqa: A002
+    options: CodexOptions,
+    thread_options: ThreadOptions,
+    thread_id: str | None,
+    turn_options: TurnOptions,
+    output_schema_path: str | None,
+) -> CodexExecArgs:
+    normalized = normalize_input(input)
+    args = CodexExecArgs(
+        input=normalized.prompt,
+        images=normalized.images,
+        **thread_options,  # type: ignore[typeddict-item]
+    )
+
+    base_url = options.get("base_url")
+    if base_url is not None:
+        args["base_url"] = base_url
+
+    api_key = options.get("api_key")
+    if api_key is not None:
+        args["api_key"] = api_key
+
+    if thread_id is not None:
+        args["thread_id"] = thread_id
+
+    signal = turn_options.get("signal")
+    if signal is not None:
+        args["signal"] = signal
+
+    if output_schema_path is not None:
+        args["output_schema_file"] = output_schema_path
+
+    return args

@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
-from typing import NamedTuple, cast
+from typing import cast
 
 from typing_extensions import Unpack
 
-from acodex._internal.exec import CodexExecArgs
+from acodex._internal.exec import build_exec_args
 from acodex._internal.output_schema_file import UNSET, create_output_schema_file
 from acodex._internal.thread_core import (
     build_turn_or_raise,
     initial_turn_state,
-    normalize_input,
     parse_thread_event_jsonl,
     reduce_turn_state,
 )
@@ -74,13 +73,11 @@ class Thread:
             schema_file = create_output_schema_file(turn_options.get("output_schema", UNSET))
             line_stream: Iterator[str] | None = None
             try:
-                exec_args = _build_exec_args(
+                exec_args = build_exec_args(
                     input=input,
-                    config=_ExecArgsConfig(
-                        options=self._options,
-                        thread_options=self._thread_options,
-                        thread_id=self._id,
-                    ),
+                    options=self._options,
+                    thread_options=self._thread_options,
+                    thread_id=self._id,
                     turn_options=turn_options,
                     output_schema_path=schema_file.schema_path,
                 )
@@ -175,13 +172,11 @@ class AsyncThread:
             schema_file = create_output_schema_file(turn_options.get("output_schema", UNSET))
             line_stream: AsyncIterator[str] | None = None
             try:
-                exec_args = _build_exec_args(
+                exec_args = build_exec_args(
                     input=input,
-                    config=_ExecArgsConfig(
-                        options=self._options,
-                        thread_options=self._thread_options,
-                        thread_id=self._id,
-                    ),
+                    options=self._options,
+                    thread_options=self._thread_options,
+                    thread_id=self._id,
                     turn_options=turn_options,
                     output_schema_path=schema_file.schema_path,
                 )
@@ -228,83 +223,6 @@ class AsyncThread:
             await _aclose_if_possible(events)
 
         return build_turn_or_raise(state)
-
-
-class _ExecArgsConfig(NamedTuple):
-    options: CodexOptions
-    thread_options: ThreadOptions
-    thread_id: str | None
-
-
-def _build_exec_args(
-    *,
-    input: Input,  # noqa: A002
-    config: _ExecArgsConfig,
-    turn_options: TurnOptions,
-    output_schema_path: str | None,
-) -> CodexExecArgs:
-    normalized = normalize_input(input)
-    raw_args: dict[str, object] = {
-        "input": normalized.prompt,
-        "thread_id": config.thread_id,
-        "images": normalized.images,
-    }
-    _set_if_present(raw_args, key="base_url", value=config.options.get("base_url"))
-    _set_if_present(raw_args, key="api_key", value=config.options.get("api_key"))
-
-    _set_if_present(raw_args, key="model", value=config.thread_options.get("model"))
-    _set_if_present(
-        raw_args,
-        key="sandbox_mode",
-        value=config.thread_options.get("sandbox_mode"),
-    )
-    _set_if_present(
-        raw_args,
-        key="working_directory",
-        value=config.thread_options.get("working_directory"),
-    )
-    _set_if_present(
-        raw_args,
-        key="additional_directories",
-        value=config.thread_options.get("additional_directories"),
-    )
-    if config.thread_options.get("skip_git_repo_check") is True:
-        raw_args["skip_git_repo_check"] = True
-    _set_if_present(
-        raw_args,
-        key="model_reasoning_effort",
-        value=config.thread_options.get("model_reasoning_effort"),
-    )
-    _set_if_present(
-        raw_args,
-        key="network_access_enabled",
-        value=config.thread_options.get("network_access_enabled"),
-    )
-    _set_if_present(
-        raw_args,
-        key="web_search_mode",
-        value=config.thread_options.get("web_search_mode"),
-    )
-    _set_if_present(
-        raw_args,
-        key="web_search_enabled",
-        value=config.thread_options.get("web_search_enabled"),
-    )
-    _set_if_present(
-        raw_args,
-        key="approval_policy",
-        value=config.thread_options.get("approval_policy"),
-    )
-
-    _set_if_present(raw_args, key="signal", value=turn_options.get("signal"))
-    _set_if_present(raw_args, key="output_schema_file", value=output_schema_path)
-
-    return cast("CodexExecArgs", raw_args)
-
-
-def _set_if_present(args: dict[str, object], *, key: str, value: object) -> None:
-    if value is not None:
-        args[key] = value
 
 
 def _close_if_possible(iterator: object) -> None:

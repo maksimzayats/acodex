@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import threading
 from itertools import pairwise
 from typing import cast
 
@@ -11,9 +12,11 @@ from acodex._internal.exec import (
     _PYTHON_SDK_ORIGINATOR,
     CodexExecArgs,
     CodexExecCLICommandBuilder,
+    build_exec_args,
 )
 from acodex.exceptions import CodexConfigError
 from acodex.types.codex_options import CodexConfigObject
+from acodex.types.input import UserInputLocalImage, UserInputText
 from acodex.types.thread_options import ThreadOptions
 
 
@@ -33,6 +36,67 @@ def test_exec_args_include_thead_args() -> None:
     thread_options_args = set(ThreadOptions.__annotations__)
 
     assert thread_options_args.issubset(thead_args)
+
+
+def test_build_exec_args_includes_normalized_input_thread_metadata_and_turn_options() -> None:
+    signal = threading.Event()
+    args = build_exec_args(
+        input=[
+            UserInputText(text="hello"),
+            UserInputLocalImage(path="/images/one.png"),
+            UserInputText(text="world"),
+        ],
+        options={},
+        thread_options={},
+        thread_id="thread-123",
+        turn_options={"signal": signal},
+        output_schema_path="/schemas/schema.json",
+    )
+
+    assert args["input"] == "hello\n\nworld"
+    assert args["images"] == ["/images/one.png"]
+    assert args["thread_id"] == "thread-123"
+    assert args["signal"] is signal
+    assert args["output_schema_file"] == "/schemas/schema.json"
+
+
+def test_build_exec_args_unpacks_thread_options_with_none_values() -> None:
+    thread_options = cast(
+        "ThreadOptions",
+        {
+            "model": None,
+            "skip_git_repo_check": None,
+            "network_access_enabled": None,
+        },
+    )
+
+    args = build_exec_args(
+        input="hello world",
+        options={},
+        thread_options=thread_options,
+        thread_id=None,
+        turn_options={},
+        output_schema_path=None,
+    )
+    args_dict = cast("dict[str, object]", args)
+
+    assert args_dict["model"] is None
+    assert args_dict["skip_git_repo_check"] is None
+    assert args_dict["network_access_enabled"] is None
+
+
+def test_build_exec_args_includes_base_url_and_api_key_from_codex_options() -> None:
+    args = build_exec_args(
+        input="hello world",
+        options={"base_url": "https://example.test", "api_key": "key-123"},
+        thread_options={},
+        thread_id=None,
+        turn_options={},
+        output_schema_path=None,
+    )
+
+    assert args["base_url"] == "https://example.test"
+    assert args["api_key"] == "key-123"
 
 
 def test_exec_builder_serializes_config_overrides() -> None:
