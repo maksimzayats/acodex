@@ -122,6 +122,30 @@ def test_exec_builder_keeps_config_override_precedence_order() -> None:
     ]
 
 
+def test_exec_builder_serializes_thread_config_flags_as_toml_values() -> None:
+    builder = CodexExecCLICommandBuilder(
+        args=cast(
+            "CodexExecArgs",
+            {
+                "input": "hello world",
+                "model_reasoning_effort": 'high"value',
+                "network_access_enabled": True,
+                "web_search_mode": 'live"value',
+                "approval_policy": 'never"value',
+            },
+        ),
+    )
+
+    command = builder.build_command()
+
+    assert _collect_all_config_values(command.argv) == [
+        'model_reasoning_effort="high\\"value"',
+        "sandbox_workspace_write.network_access=true",
+        'web_search="live\\"value"',
+        'approval_policy="never\\"value"',
+    ]
+
+
 def _collect_all_config_values(argv: list[str]) -> list[str]:
     return [value for key, value in pairwise(argv) if key == "--config"]
 

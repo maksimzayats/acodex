@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, TypedDict
 
 from acodex._internal.constants.exec import INTERNAL_ORIGINATOR_ENV, PYTHON_SDK_ORIGINATOR
 from acodex._internal.toml import serialize_config_overrides, to_toml_value
-from acodex.types.codex_options import CodexConfigObject
+from acodex.types.codex_options import CodexConfigObject, CodexConfigValue
 from acodex.types.thread_options import (
     ApprovalMode,
     ModelReasoningEffort,
@@ -207,8 +207,7 @@ class CodexExecCLICommandBuilder:
         if not model_reasoning_effort:
             return
 
-        self._command.argv.append("--config")
-        self._command.argv.append(f'model_reasoning_effort="{model_reasoning_effort}"')
+        self._append_toml_config_override("model_reasoning_effort", model_reasoning_effort)
 
     def _add_network_access_enabled(self) -> None:
         self._seen_args.add("network_access_enabled")
@@ -217,9 +216,10 @@ class CodexExecCLICommandBuilder:
         if network_access_enabled is None:
             return
 
-        value = to_toml_value(network_access_enabled, "network_access_enabled")
-        self._command.argv.append("--config")
-        self._command.argv.append(f"sandbox_workspace_write.network_access={value}")
+        self._append_toml_config_override(
+            "sandbox_workspace_write.network_access",
+            network_access_enabled,
+        )
 
     def _add_web_search_mode(self) -> None:
         self._seen_args.add("web_search_mode")
@@ -227,17 +227,14 @@ class CodexExecCLICommandBuilder:
 
         web_search_mode = self._args.get("web_search_mode")
         if web_search_mode:
-            self._command.argv.append("--config")
-            self._command.argv.append(f'web_search="{web_search_mode}"')
+            self._append_toml_config_override("web_search", web_search_mode)
             return
 
         web_search_enabled = self._args.get("web_search_enabled")
         if web_search_enabled is True:
-            self._command.argv.append("--config")
-            self._command.argv.append('web_search="live"')
+            self._append_toml_config_override("web_search", "live")
         elif web_search_enabled is False:
-            self._command.argv.append("--config")
-            self._command.argv.append('web_search="disabled"')
+            self._append_toml_config_override("web_search", "disabled")
 
     def _add_approval_policy(self) -> None:
         self._seen_args.add("approval_policy")
@@ -246,8 +243,7 @@ class CodexExecCLICommandBuilder:
         if not approval_policy:
             return
 
-        self._command.argv.append("--config")
-        self._command.argv.append(f'approval_policy="{approval_policy}"')
+        self._append_toml_config_override("approval_policy", approval_policy)
 
     def _add_thread_id(self) -> None:
         self._seen_args.add("thread_id")
@@ -269,3 +265,8 @@ class CodexExecCLICommandBuilder:
         for image in images:
             self._command.argv.append("--image")
             self._command.argv.append(image)
+
+    def _append_toml_config_override(self, key: str, value: CodexConfigValue) -> None:
+        toml_value = to_toml_value(value, key)
+        self._command.argv.append("--config")
+        self._command.argv.append(f"{key}={toml_value}")
