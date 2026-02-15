@@ -4,7 +4,7 @@ from dataclasses import MISSING, Field, fields, is_dataclass
 from typing import Literal, get_args, get_origin, get_type_hints
 
 from acodex.types import events as py_events, items as py_items
-from tests.config import ROOT_DIR
+from tests.compatibility.vendor_ts_sdk import VENDOR_TS_SDK_SRC
 from tools.compatibility.ts_type_alias_parser import TsAlias, parse_exported_type_aliases
 
 
@@ -106,7 +106,7 @@ def test_thread_event_union_membership_matches_typescript() -> None:
 
 
 def _load_event_aliases() -> dict[str, TsAlias]:
-    events_ts_path = ROOT_DIR / "_ts_sdk" / "src" / "events.ts"
+    events_ts_path = VENDOR_TS_SDK_SRC / "events.ts"
     return parse_exported_type_aliases(events_ts_path.read_text(encoding="utf-8"))
 
 
