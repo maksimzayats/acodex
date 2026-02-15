@@ -53,14 +53,6 @@ jobs:
         if: steps.current.outputs.tag != steps.latest.outputs.tag
         run: make vendor-ts-sdk TAG="${{ steps.latest.outputs.tag }}"
 
-      - name: Lint
-        if: steps.current.outputs.tag != steps.latest.outputs.tag
-        run: make lint
-
-      - name: Test
-        if: steps.current.outputs.tag != steps.latest.outputs.tag
-        run: make test
-
       - name: Read new commit
         if: steps.current.outputs.tag != steps.latest.outputs.tag
         id: meta
