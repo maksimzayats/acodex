@@ -1,0 +1,118 @@
+[project]
+name = "acodex"
+dynamic = ["version"]
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [{ name = "Maksim Zayats", email = "maksim@zayats.dev" }]
+keywords = []
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
+    "Programming Language :: Python :: Free Threading :: 3 - Stable",
+    "Typing :: Typed",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/maksimzayats/acodex"
+Repository = "https://github.com/maksimzayats/acodex"
+Issues = "https://github.com/maksimzayats/acodex/issues"
+
+[dependency-groups]
+dev = [
+    "mypy>=1.19.1",
+    "prek>=0.3.2",
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
+    "ruff>=0.14.13",
+]
+docs = [
+    "furo>=2025.12.19",
+    "sphinx>=8.1.3",
+    "sphinx-copybutton>=0.5.2",
+]
+
+[build-system]
+requires = ["hatchling", "uv-dynamic-versioning"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
+
+[tool.uv-dynamic-versioning]
+vcs = "git"
+style = "pep440"
+
+[tool.uv]
+cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true, tags = true } }]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+ignore_missing_imports = true
+local_partial_types = true
+warn_unreachable = true
+enable_error_code = [
+    "truthy-bool",
+    "truthy-iterable",
+    "redundant-expr",
+    "unused-awaitable",
+    "ignore-without-code",
+    "possibly-undefined",
+    "redundant-self",
+    "unimported-reveal",
+    "deprecated",
+    "exhaustive-match",
+]
+disable_error_code = [
+    "unused-ignore",
+    "no-any-return",
+]
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+strict = false
+disable_error_code = ["valid-type", "misc", "untyped-decorator"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+]
+filterwarnings = [
+    "error",
+    # Ignore ResourceWarnings from unclosed sockets/event loops during GC
+    # These come from pytest-asyncio internals and are not related to test code
+    "ignore:unclosed <socket.socket:ResourceWarning",
+    "ignore:unclosed event loop:ResourceWarning",
+]
+
+[tool.coverage.run]
+source = ["src/acodex"]
+branch = true
+parallel = true
+
+[tool.coverage.report]
+fail_under = 100
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "if typing.TYPE_CHECKING:",
+    "@overload",
+    "@typing.overload",
+    "raise NotImplementedError",
+    "\\.\\.\\.",
+]
+show_missing = true
+skip_covered = true
