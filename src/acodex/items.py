@@ -210,7 +210,6 @@ class TodoListItem:
     """Discriminator with value ``"todo_list"``."""
 
 
-# Canonical union of thread items and their type-specific payloads.
 ThreadItem: TypeAlias = (
     AgentMessageItem
     | ReasoningItem

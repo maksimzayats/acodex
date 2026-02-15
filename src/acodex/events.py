@@ -128,7 +128,6 @@ class ThreadErrorEvent:
     """Discriminator with value ``"error"``."""
 
 
-# Top-level JSONL events emitted by codex exec.
 ThreadEvent: TypeAlias = (
     ThreadStartedEvent
     | TurnStartedEvent
