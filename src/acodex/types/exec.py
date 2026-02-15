@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from enum import Enum
 from typing import TYPE_CHECKING, TypedDict
 
 from acodex.types.thread_options import (
@@ -38,3 +39,23 @@ class CodexExecArgs(TypedDict):
     web_search_mode: NotRequired[WebSearchMode]
     web_search_enabled: NotRequired[bool]
     approval_policy: NotRequired[ApprovalMode]
+
+
+class CodexExecArg(str, Enum):
+    INPUT = "input"
+    BASE_URL = "base_url"
+    API_KEY = "api_key"
+    THREAD_ID = "thread_id"
+    IMAGES = "images"
+    MODEL = "model"
+    SANDBOX_MODE = "sandbox_mode"
+    WORKING_DIRECTORY = "working_directory"
+    ADDITIONAL_DIRECTORIES = "additional_directories"
+    SKIP_GIT_REPO_CHECK = "skip_git_repo_check"
+    OUTPUT_SCHEMA_FILE = "output_schema_file"
+    MODEL_REASONING_EFFORT = "model_reasoning_effort"
+    SIGNAL = "signal"
+    NETWORK_ACCESS_ENABLED = "network_access_enabled"
+    WEB_SEARCH_MODE = "web_search_mode"
+    WEB_SEARCH_ENABLED = "web_search_enabled"
+    APPROVAL_POLICY = "approval_policy"
