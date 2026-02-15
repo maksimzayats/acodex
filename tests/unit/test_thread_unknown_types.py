@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections.abc import Iterator
 from typing import Any, cast
 
@@ -96,6 +97,27 @@ def test_parse_thread_event_jsonl_invalid_json_raises_codex_thread_run_error() -
         parse_thread_event_jsonl("not-json")
 
 
+def test_parse_thread_event_jsonl_rejects_non_object_payload() -> None:
+    with pytest.raises(CodexThreadRunError, match=re.escape("Failed to parse item: []")):
+        parse_thread_event_jsonl("[]")
+
+
+def test_parse_thread_event_jsonl_wraps_type_errors_from_parsers() -> None:
+    line = json.dumps(
+        {
+            "type": "turn.completed",
+            "usage": {
+                "input_tokens": "x",
+                "cached_input_tokens": 0,
+                "output_tokens": 1,
+            },
+        },
+    )
+
+    with pytest.raises(CodexThreadRunError, match=re.escape(f"Failed to parse item: {line}")):
+        parse_thread_event_jsonl(line)
+
+
 def test_normalize_input_handles_string_and_list() -> None:
     from_string = normalize_input("hello")
     assert from_string.prompt == "hello"
@@ -182,6 +204,75 @@ def test_parse_thread_item_supports_all_public_item_variants() -> None:
     assert isinstance(error_item, ErrorItem)
 
 
+def test_parse_item_started_event_is_supported() -> None:
+    event = parse_thread_event_jsonl(
+        json.dumps(
+            {
+                "type": "item.started",
+                "item": {"type": "agent_message", "id": "a", "text": "hello"},
+            },
+        ),
+    )
+
+    assert event is not None
+    assert event.type == "item.started"
+
+
+def test_parse_mcp_tool_call_allows_missing_result_and_error() -> None:
+    item = parse_thread_item(
+        {
+            "type": "mcp_tool_call",
+            "id": "mcp-1",
+            "server": "srv",
+            "tool": "run",
+            "arguments": {"x": 1},
+            "status": "in_progress",
+        },
+    )
+
+    assert isinstance(item, McpToolCallItem)
+    assert item.result is None
+    assert item.error is None
+
+
+def test_parse_thread_item_command_execution_exit_code_is_optional() -> None:
+    item = parse_thread_item(
+        {
+            "type": "command_execution",
+            "id": "c-1",
+            "command": "ls",
+            "aggregated_output": "ok",
+            "status": "in_progress",
+        },
+    )
+
+    assert isinstance(item, CommandExecutionItem)
+    assert item.exit_code is None
+
+
+def test_parse_thread_item_rejects_invalid_shapes_with_field_messages() -> None:
+    with pytest.raises(TypeError, match="thread item must be an object"):
+        parse_thread_item("not-an-object")
+
+    with pytest.raises(TypeError, match=re.escape("web_search.id must be a string")):
+        parse_thread_item({"type": "web_search", "id": 123, "query": "q"})
+
+    with pytest.raises(TypeError, match=re.escape("todo_list.items must be an array")):
+        parse_thread_item({"type": "todo_list", "id": "t", "items": "nope"})
+
+    with pytest.raises(
+        TypeError,
+        match=re.escape("todo_list.items[0].completed must be a boolean"),
+    ):
+        parse_thread_item(
+            {
+                "type": "todo_list",
+                "id": "t",
+                "items": [{"text": "task", "completed": "no"}],
+            },
+        )
+
+
 def test_parse_thread_event_jsonl_parses_event_variants() -> None:
     started = parse_thread_event_jsonl(json.dumps({"type": "turn.started"}))
     updated = parse_thread_event_jsonl(
@@ -252,6 +343,15 @@ def test_turn_state_reduction_builds_turn_and_raises_on_failure() -> None:
 
     with pytest.raises(CodexThreadRunError, match="failed"):
         build_turn_or_raise(failed_state)
+
+
+def test_reduce_turn_state_does_not_set_final_response_for_non_agent_item() -> None:
+    state = initial_turn_state()
+    event = ItemCompletedEvent(item=ReasoningItem(id="r-1", text="thinking"))
+
+    reduced = reduce_turn_state(state, event)
+
+    assert not reduced.final_response
 
 
 class _FakeExec:

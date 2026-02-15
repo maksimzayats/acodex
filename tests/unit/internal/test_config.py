@@ -4,7 +4,7 @@ from typing import cast
 
 import pytest
 
-from acodex._internal.config import to_config_value
+from acodex._internal.config import _normalize_exponent, to_config_value
 from acodex.exceptions import CodexConfigError
 from acodex.types.codex_options import CodexConfigValue
 
@@ -37,6 +37,14 @@ def test_to_config_value_renders_int_with_js_number_parity() -> None:
     assert (
         to_config_value(cast("CodexConfigValue", 9007199254740993), "value") == "9007199254740992"
     )
+
+
+def test_to_config_value_exponential_mantissa_with_decimal_executes_normalization() -> None:
+    assert to_config_value(1.23e21, "value") == "1.23e+21"
+
+
+def test_normalize_exponent_accepts_missing_sign() -> None:
+    assert _normalize_exponent("21") == "+21"
 
 
 def test_to_config_value_renders_nested_array_and_object() -> None:

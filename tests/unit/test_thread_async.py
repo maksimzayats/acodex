@@ -10,9 +10,9 @@ import pytest
 
 from acodex.exceptions import CodexThreadRunError
 from acodex.exec import AsyncCodexExec
-from acodex.thread import AsyncThread
+from acodex.thread import AsyncThread, _aclose_if_possible
 from acodex.types.events import ItemCompletedEvent, ThreadStartedEvent
-from acodex.types.input import UserInputLocalImage, UserInputText
+from acodex.types.input import Input, UserInputLocalImage, UserInputText
 from acodex.types.items import AgentMessageItem
 from acodex.types.turn_options import OutputSchemaInput
 from tests.unit.fake_codex_executable import create_fake_codex_executable
@@ -139,6 +139,59 @@ def test_async_thread_output_schema_file_lifecycle_exhausted_and_closed_stream(
     assert before_close_exists
     assert not closed_path.exists()
     assert not closed_path.parent.exists()
+
+
+def test_async_thread_run_streamed_skips_unknown_events(tmp_path: Path) -> None:
+    thread = _build_thread(
+        tmp_path,
+        env={
+            "FAKE_CODEX_MODE": "lines",
+            "FAKE_LINES_JSON": json.dumps(
+                [
+                    json.dumps({"type": "future.event", "payload": {"x": 1}}),
+                    json.dumps({"type": "thread.started", "thread_id": "thread-async-known"}),
+                ],
+            ),
+        },
+    )
+
+    async def run() -> list[object]:
+        streamed = await thread.run_streamed("hello")
+        return [event async for event in streamed.events]
+
+    events = asyncio.run(run())
+
+    assert len(events) == 1
+    assert isinstance(events[0], ThreadStartedEvent)
+    assert thread.id == "thread-async-known"
+
+
+def test_async_thread_run_streamed_cleanup_when_build_exec_args_raises(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    thread = _build_thread(tmp_path, env={"FAKE_CODEX_MODE": "thread_success"})
+    schema: OutputSchemaInput = {"type": "object", "properties": {"ok": {"type": "boolean"}}}
+    forced_temp_dir = tmp_path / "forced-async-schema-dir"
+
+    def fake_mkdtemp(*_: object, **__: object) -> str:
+        forced_temp_dir.mkdir(parents=True, exist_ok=True)
+        return str(forced_temp_dir)
+
+    monkeypatch.setattr("acodex._internal.output_schema_file.tempfile.mkdtemp", fake_mkdtemp)
+
+    async def run() -> None:
+        streamed = await thread.run_streamed(cast("Input", {"bad": 1}), output_schema=schema)
+        with pytest.raises(TypeError, match=r"input must be str or list\[UserInput\], got dict"):
+            await anext(streamed.events)
+
+    asyncio.run(run())
+
+    assert not forced_temp_dir.exists()
+
+
+def test_aclose_if_possible_is_noop_without_aclose() -> None:
+    asyncio.run(_aclose_if_possible(object()))
 
 
 def _build_thread(

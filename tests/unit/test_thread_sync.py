@@ -9,9 +9,9 @@ import pytest
 
 from acodex.exceptions import CodexThreadRunError
 from acodex.exec import CodexExec
-from acodex.thread import Thread
+from acodex.thread import Thread, _close_if_possible
 from acodex.types.events import ItemCompletedEvent, ThreadStartedEvent
-from acodex.types.input import UserInputLocalImage, UserInputText
+from acodex.types.input import Input, UserInputLocalImage, UserInputText
 from acodex.types.items import AgentMessageItem
 from acodex.types.turn_options import OutputSchemaInput
 from tests.unit.fake_codex_executable import create_fake_codex_executable
@@ -125,6 +125,31 @@ def test_thread_output_schema_file_lifecycle_closed_stream(tmp_path: Path) -> No
 
     assert not schema_path.exists()
     assert not schema_path.parent.exists()
+
+
+def test_thread_run_streamed_cleanup_when_build_exec_args_raises(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    thread = _build_thread(tmp_path, env={"FAKE_CODEX_MODE": "thread_success"})
+    schema: OutputSchemaInput = {"type": "object", "properties": {"ok": {"type": "boolean"}}}
+    forced_temp_dir = tmp_path / "forced-schema-dir"
+
+    def fake_mkdtemp(*_: object, **__: object) -> str:
+        forced_temp_dir.mkdir(parents=True, exist_ok=True)
+        return str(forced_temp_dir)
+
+    monkeypatch.setattr("acodex._internal.output_schema_file.tempfile.mkdtemp", fake_mkdtemp)
+
+    events = thread.run_streamed(cast("Input", {"bad": 1}), output_schema=schema).events
+    with pytest.raises(TypeError, match=r"input must be str or list\[UserInput\], got dict"):
+        next(events)
+
+    assert not forced_temp_dir.exists()
+
+
+def test_close_if_possible_is_noop_without_close() -> None:
+    _close_if_possible(iter(()))
 
 
 def _build_thread(
