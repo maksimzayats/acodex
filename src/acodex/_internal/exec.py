@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, TypedDict
 
 from acodex._internal.constants.exec import INTERNAL_ORIGINATOR_ENV, PYTHON_SDK_ORIGINATOR
+from acodex._internal.toml import serialize_config_overrides, to_toml_value
 from acodex.types.codex_options import CodexConfigObject
 from acodex.types.thread_options import (
     ApprovalMode,
@@ -135,11 +136,9 @@ class CodexExecCLICommandBuilder:
         if not self._config_overrides:
             return
 
-        for key, value in self._config_overrides.items():
-            # TODO(codex): need to convert to toml; including nesting
-            # TODO(codex): Quoting / TOML Literal Behavior
+        for override in serialize_config_overrides(self._config_overrides):
             self._command.argv.append("--config")
-            self._command.argv.append(f"{key}={value}")
+            self._command.argv.append(override)
 
     def _add_model(self) -> None:
         self._seen_args.add("model")
@@ -218,10 +217,9 @@ class CodexExecCLICommandBuilder:
         if network_access_enabled is None:
             return
 
+        value = to_toml_value(network_access_enabled, "network_access_enabled")
         self._command.argv.append("--config")
-        self._command.argv.append(
-            f"sandbox_workspace_write.network_access={network_access_enabled}",
-        )
+        self._command.argv.append(f"sandbox_workspace_write.network_access={value}")
 
     def _add_web_search_mode(self) -> None:
         self._seen_args.add("web_search_mode")

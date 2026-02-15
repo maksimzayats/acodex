@@ -57,6 +57,7 @@ testing standards. Prefer uv for all tooling.
 - All new public APIs must be fully typed.
 - mypy is strict; keep types precise and avoid `Any`.
 - If `Any` is unavoidable, document why and keep scope minimal.
+- Do not use generic `object` annotations when domain types already exist (for example, prefer `CodexConfigObject` / `CodexConfigValue`).
 - Use `typing.Protocol` or `collections.abc` for public contracts.
 - Prefer `Final` for constants that should not change.
 
