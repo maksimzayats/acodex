@@ -40,6 +40,17 @@ def test_sync_nonzero_exit_raises_codex_exec_error_includes_stderr(tmp_path: Pat
     assert error.value.stderr == "stderr boom\n"
 
 
+def test_sync_nonzero_exit_before_stdout_closes_raises_codex_exec_error(tmp_path: Path) -> None:
+    executable = _create_fake_codex_executable(tmp_path)
+    runner = SyncCodexProcessRunner(executable_path=str(executable))
+    command = _build_command(mode="exit_before_stdout_closes")
+
+    with pytest.raises(CodexExecError, match=re.escape("Codex Exec exited with code 7")) as error:
+        list(runner.stream_lines(command))
+
+    assert error.value.stderr == "stderr boom\n"
+
+
 def test_sync_cancel_pre_set_raises_cancelled_without_spawning(tmp_path: Path) -> None:
     executable = _create_fake_codex_executable(tmp_path)
     runner = SyncCodexProcessRunner(executable_path=str(executable))
@@ -96,6 +107,21 @@ def test_async_nonzero_exit_raises_codex_exec_error_includes_stderr(tmp_path: Pa
 
     with pytest.raises(CodexExecError, match=re.escape("Codex Exec exited with code 7")) as error:
         _run_async(run())
+
+    assert error.value.stderr == "stderr boom\n"
+
+
+def test_async_nonzero_exit_before_stdout_closes_raises_codex_exec_error(tmp_path: Path) -> None:
+    executable = _create_fake_codex_executable(tmp_path)
+    runner = AsyncCodexProcessRunner(executable_path=str(executable))
+    command = _build_command(mode="exit_before_stdout_closes")
+
+    async def run() -> None:
+        async for _ in runner.stream_lines(command):
+            pass
+
+    with pytest.raises(CodexExecError, match=re.escape("Codex Exec exited with code 7")) as error:
+        _run_async(asyncio.wait_for(run(), timeout=2.0))
 
     assert error.value.stderr == "stderr boom\n"
 
@@ -165,6 +191,7 @@ def _create_fake_codex_executable(tmp_path: Path) -> Path:
             from __future__ import annotations
 
             import os
+            import subprocess
             import sys
             import time
             from pathlib import Path
@@ -182,6 +209,20 @@ def _create_fake_codex_executable(tmp_path: Path) -> Path:
                 raise SystemExit(0)
 
             if mode == "nonzero":
+                sys.stderr.write("stderr boom\\n")
+                sys.stderr.flush()
+                raise SystemExit(7)
+
+            if mode == "exit_before_stdout_closes":
+                # Keep stdout alive briefly after parent exit to mirror TS parity race.
+                subprocess.Popen(
+                    [
+                        sys.executable,
+                        "-c",
+                        "import sys, time; time.sleep(0.05); sys.stdout.write('late line\\\\n'); sys.stdout.flush()",
+                    ],
+                    stdin=subprocess.DEVNULL,
+                )
                 sys.stderr.write("stderr boom\\n")
                 sys.stderr.flush()
                 raise SystemExit(7)
