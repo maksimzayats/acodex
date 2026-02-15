@@ -52,7 +52,8 @@ testing standards. Prefer uv for all tooling.
 
 ## Typing and types
 
-- Python minimum version is 3.12 (use `|` unions, `list[str]`, etc.).
+- Always use __future__ annotations for forward references and to enable postponed evaluation of annotations.
+- Python minimum version is 3.10 with future annotation (use `|` unions, `list[str]`, etc.).
 - All new public APIs must be fully typed.
 - mypy is strict; keep types precise and avoid `Any`.
 - If `Any` is unavoidable, document why and keep scope minimal.

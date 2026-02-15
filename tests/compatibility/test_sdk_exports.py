@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from acodex import __all__ as acodex_all
 from tests.config import ROOT_DIR
 from tools.compatibility.get_ts_exports import extract_exported_objects

@@ -1,2 +1,4 @@
+from __future__ import annotations
+
 INTERNAL_ORIGINATOR_ENV = "CODEX_INTERNAL_ORIGINATOR_OVERRIDE"
 PYTHON_SDK_ORIGINATOR = "codex_sdk_py"

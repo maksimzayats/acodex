@@ -86,6 +86,7 @@ ignore = [
 
 [lint.isort]
 combine-as-imports = true
+required-imports = ["from __future__ import annotations"]
 
 [lint.flake8-tidy-imports]
 ban-relative-imports = "all"

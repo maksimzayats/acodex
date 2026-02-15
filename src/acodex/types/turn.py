@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass
 from typing import Generic, TypeAlias, TypeVar

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from acodex.codex import AsyncCodex, Codex
 from acodex.thread import AsyncThread, Thread
 from acodex.types.codex_options import CodexOptions
