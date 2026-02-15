@@ -6,6 +6,7 @@ from typing import cast
 
 import pytest
 
+from acodex._internal.constants.exec import INTERNAL_ORIGINATOR_ENV, PYTHON_SDK_ORIGINATOR
 from acodex._internal.exec import CodexExecArgs, CodexExecCLICommandBuilder
 from acodex.types.codex_options import CodexConfigObject
 from acodex.types.thread_options import ThreadOptions
@@ -144,6 +145,23 @@ def test_exec_builder_serializes_thread_config_flags_as_toml_values() -> None:
         'web_search="live\\"value"',
         'approval_policy="never\\"value"',
     ]
+
+
+def test_exec_builder_does_not_inherit_process_env_when_empty_env_overrides_provided(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CODEX_ENV_SHOULD_NOT_LEAK", "leak")
+
+    builder = CodexExecCLICommandBuilder(
+        args=CodexExecArgs(input="hello world"),
+        env_overrides={},
+    )
+
+    command = builder.build_command()
+
+    assert command.env == {
+        INTERNAL_ORIGINATOR_ENV: PYTHON_SDK_ORIGINATOR,
+    }
 
 
 def _collect_all_config_values(argv: list[str]) -> list[str]:

@@ -65,7 +65,7 @@ class CodexExecCLICommandBuilder:
     ) -> None:
         self._args = args
         self._config_overrides = config_overrides or {}
-        self._env_overrides = env_overrides or {}
+        self._env_overrides = env_overrides
 
         self._command = CodexExecCommand(argv=[], env={}, stdin="")
         self._seen_args: set[str] = set()
@@ -102,7 +102,7 @@ class CodexExecCLICommandBuilder:
         self._command.stdin = stdin
 
     def _add_env(self) -> None:
-        env = dict(self._env_overrides) if self._env_overrides else dict(os.environ)
+        env = dict(self._env_overrides) if self._env_overrides is not None else dict(os.environ)
 
         self._seen_args.add("base_url")
         base_url = self._args.get("base_url")
