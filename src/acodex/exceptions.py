@@ -38,5 +38,9 @@ class CodexConfigError(CodexError):
     """Raised when Codex config overrides are invalid or cannot be serialized."""
 
 
+class CodexOutputSchemaError(CodexError):
+    """Raised when a TurnOptions.output_schema payload is invalid."""
+
+
 class CodexInternalError(CodexError):
     """Raised when an internal invariant is violated, indicating a bug in acodex."""
