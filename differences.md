@@ -67,3 +67,27 @@ Rationale:
 
 Usage implication:
 - Choose sync or async API families consistently within a call path.
+
+## 4) Cancellation error type
+
+- TypeScript SDK surfaces cancellation through generic thrown errors from abort behavior.
+- Python SDK raises `CodexCancelledError` when `TurnOptions.signal` is set before or during a run.
+
+Rationale:
+- It gives Python callers a precise exception type for control flow.
+- It keeps cancellation distinct from process failures and stream parsing failures.
+
+Usage implication:
+- Catch `CodexCancelledError` when implementing cancellation-aware loops.
+
+## 5) Codex executable discovery
+
+- TypeScript SDK resolves a bundled CLI binary from npm optional dependencies.
+- Python SDK resolves `codex` from `PATH` by default, unless `codex_path_override` is provided.
+
+Rationale:
+- Python packaging does not bundle the same platform-specific npm artifacts.
+- `PATH` lookup aligns with common Python CLI integration patterns.
+
+Usage implication:
+- Ensure `codex` is installed and discoverable on `PATH`, or pass `codex_path_override`.
