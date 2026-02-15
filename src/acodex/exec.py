@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterator
 
-from acodex._internal.exec import CodexExecArgs
+from acodex._internal.exec import CodexExecArgs, CodexExecCLICommandBuilder
 from acodex._internal.locator import find_codex_path
+from acodex._internal.process_runner import AsyncCodexProcessRunner, SyncCodexProcessRunner
 from acodex.types.codex_options import CodexConfigObject
 
 
@@ -22,8 +23,19 @@ class CodexExec:
         self._config_overrides = config_overrides
 
     def run(self, args: CodexExecArgs) -> Iterator[str]:
-        """Run Codex and stream JSONL lines."""
-        raise NotImplementedError(args)
+        """Run Codex and stream JSONL lines.
+
+        Yields:
+            JSONL line payloads emitted by the Codex CLI.
+
+        """
+        command = CodexExecCLICommandBuilder(
+            args=args,
+            config_overrides=self._config_overrides,
+            env_overrides=self._env,
+        ).build_command()
+        runner = SyncCodexProcessRunner(executable_path=self._executable_path)
+        yield from runner.stream_lines(command)
 
 
 class AsyncCodexExec:
@@ -41,5 +53,17 @@ class AsyncCodexExec:
         self._config_overrides = config_overrides
 
     async def run(self, args: CodexExecArgs) -> AsyncIterator[str]:
-        """Run Codex and stream JSONL lines asynchronously."""
-        raise NotImplementedError(args)
+        """Run Codex and stream JSONL lines asynchronously.
+
+        Yields:
+            JSONL line payloads emitted by the Codex CLI.
+
+        """
+        command = CodexExecCLICommandBuilder(
+            args=args,
+            config_overrides=self._config_overrides,
+            env_overrides=self._env,
+        ).build_command()
+        runner = AsyncCodexProcessRunner(executable_path=self._executable_path)
+        async for line in runner.stream_lines(command):
+            yield line
