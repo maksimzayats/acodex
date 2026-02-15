@@ -94,6 +94,7 @@ ban-relative-imports = "all"
 max-positional-args = 2
 
 [format]
+preview = true
 quote-style = "double"
 indent-style = "space"
 docstring-code-format = true
