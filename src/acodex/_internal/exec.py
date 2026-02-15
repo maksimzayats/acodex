@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, Final, TypedDict
 
 from acodex._internal.config import serialize_config_overrides, to_config_value
-from acodex._internal.constants.exec import INTERNAL_ORIGINATOR_ENV, PYTHON_SDK_ORIGINATOR
 from acodex.types.codex_options import CodexConfigObject, CodexConfigValue
 from acodex.types.thread_options import (
     ApprovalMode,
@@ -17,6 +16,10 @@ from acodex.types.turn_options import TurnSignal
 
 if TYPE_CHECKING:
     from typing_extensions import NotRequired
+
+
+_INTERNAL_ORIGINATOR_ENV: Final[str] = "CODEX_INTERNAL_ORIGINATOR_OVERRIDE"
+_PYTHON_SDK_ORIGINATOR: Final[str] = "codex_sdk_py"
 
 
 class CodexExecArgs(TypedDict):
@@ -114,8 +117,8 @@ class CodexExecCLICommandBuilder:
         if api_key:
             env["CODEX_API_KEY"] = api_key
 
-        if INTERNAL_ORIGINATOR_ENV not in env:
-            env[INTERNAL_ORIGINATOR_ENV] = PYTHON_SDK_ORIGINATOR
+        if _INTERNAL_ORIGINATOR_ENV not in env:
+            env[_INTERNAL_ORIGINATOR_ENV] = _PYTHON_SDK_ORIGINATOR
 
         self._command.env = env
 

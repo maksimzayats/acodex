@@ -6,8 +6,12 @@ from typing import cast
 
 import pytest
 
-from acodex._internal.constants.exec import INTERNAL_ORIGINATOR_ENV, PYTHON_SDK_ORIGINATOR
-from acodex._internal.exec import CodexExecArgs, CodexExecCLICommandBuilder
+from acodex._internal.exec import (
+    _INTERNAL_ORIGINATOR_ENV,
+    _PYTHON_SDK_ORIGINATOR,
+    CodexExecArgs,
+    CodexExecCLICommandBuilder,
+)
 from acodex.exceptions import CodexConfigError
 from acodex.types.codex_options import CodexConfigObject
 from acodex.types.thread_options import ThreadOptions
@@ -178,7 +182,7 @@ def test_exec_builder_does_not_inherit_process_env_when_empty_env_overrides_prov
     command = builder.build_command()
 
     assert command.env == {
-        INTERNAL_ORIGINATOR_ENV: PYTHON_SDK_ORIGINATOR,
+        _INTERNAL_ORIGINATOR_ENV: _PYTHON_SDK_ORIGINATOR,
     }
 
 
