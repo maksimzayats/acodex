@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Iterator
 
 from acodex._internal.exec import CodexExecArgs
+from acodex._internal.locator import find_codex_path
 from acodex.types.codex_options import CodexConfigObject
 
 
@@ -16,8 +17,7 @@ class CodexExec:
         env: dict[str, str] | None = None,
         config_overrides: CodexConfigObject | None = None,
     ) -> None:
-        # TODO(codex): find codex path helper call (internal) if none
-        self._executable_path = executable_path
+        self._executable_path = executable_path or find_codex_path()
         self._env = env
         self._config_overrides = config_overrides
 
@@ -36,8 +36,7 @@ class AsyncCodexExec:
         env: dict[str, str] | None = None,
         config_overrides: CodexConfigObject | None = None,
     ) -> None:
-        # TODO(codex): find codex path helper call (internal) if none
-        self._executable_path = executable_path
+        self._executable_path = executable_path or find_codex_path()
         self._env = env
         self._config_overrides = config_overrides
 

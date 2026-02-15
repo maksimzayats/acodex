@@ -17,6 +17,19 @@ class CodexExecError(CodexError):
         self.stderr = stderr
 
 
+class CodexExecutableNotFoundError(CodexExecError):
+    """Raised when the codex executable cannot be discovered on PATH."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        executable_name: str = "codex",
+    ) -> None:
+        super().__init__(message)
+        self.executable_name = executable_name
+
+
 class CodexThreadRunError(CodexError):
     """Raised when a thread run fails while streaming or parsing events."""
 
