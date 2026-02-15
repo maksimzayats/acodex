@@ -8,6 +8,7 @@ import pytest
 
 from acodex._internal.constants.exec import INTERNAL_ORIGINATOR_ENV, PYTHON_SDK_ORIGINATOR
 from acodex._internal.exec import CodexExecArgs, CodexExecCLICommandBuilder
+from acodex.exceptions import CodexConfigError
 from acodex.types.codex_options import CodexConfigObject
 from acodex.types.thread_options import ThreadOptions
 
@@ -30,7 +31,7 @@ def test_exec_args_include_thead_args() -> None:
     assert thread_options_args.issubset(thead_args)
 
 
-def test_exec_builder_serializes_toml_config_overrides() -> None:
+def test_exec_builder_serializes_config_overrides() -> None:
     builder = CodexExecCLICommandBuilder(
         args=CodexExecArgs(input="hello world"),
         config_overrides={
@@ -121,7 +122,7 @@ def test_exec_builder_raises_for_invalid_config_overrides(
         config_overrides=config_overrides,
     )
 
-    with pytest.raises(ValueError, match=re.escape(error)):
+    with pytest.raises(CodexConfigError, match=re.escape(error)):
         builder.build_command()
 
 
@@ -140,7 +141,7 @@ def test_exec_builder_keeps_config_override_precedence_order() -> None:
     ]
 
 
-def test_exec_builder_serializes_thread_config_flags_as_toml_values() -> None:
+def test_exec_builder_serializes_thread_config_flags_as_config_values() -> None:
     builder = CodexExecCLICommandBuilder(
         args=cast(
             "CodexExecArgs",

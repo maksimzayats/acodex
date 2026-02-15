@@ -21,5 +21,9 @@ class CodexThreadRunError(CodexError):
     """Raised when a thread run fails while streaming or parsing events."""
 
 
+class CodexConfigError(CodexError):
+    """Raised when Codex config overrides are invalid or cannot be serialized."""
+
+
 class CodexInternalError(CodexError):
     """Raised when an internal invariant is violated, indicating a bug in acodex."""

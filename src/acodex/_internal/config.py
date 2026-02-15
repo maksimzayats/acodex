@@ -6,9 +6,10 @@ import re
 from decimal import Decimal
 from typing import Any, Final, TypeGuard, cast
 
+from acodex.exceptions import CodexConfigError
 from acodex.types.codex_options import CodexConfigObject, CodexConfigValue
 
-_TOML_BARE_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
+_CONFIG_BARE_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
 _JS_EXPONENTIAL_UPPER_BOUND: Final[float] = 1e21
 _JS_EXPONENTIAL_LOWER_BOUND: Final[float] = 1e-6
 
@@ -19,7 +20,7 @@ def serialize_config_overrides(config_overrides: CodexConfigObject) -> list[str]
     return overrides
 
 
-def to_toml_value(value: CodexConfigValue, path: str) -> str:
+def to_config_value(value: CodexConfigValue, path: str) -> str:
     raw_value: Any = value
 
     if isinstance(raw_value, str):
@@ -36,15 +37,15 @@ def to_toml_value(value: CodexConfigValue, path: str) -> str:
         return _render_object(raw_value, path)
     if raw_value is None:
         msg = f"Codex config override at {path} cannot be null"
-        raise ValueError(msg)
+        raise CodexConfigError(msg)
 
     type_name = type(raw_value).__name__
     msg = f"Unsupported Codex config override value at {path}: {type_name}"
-    raise ValueError(msg)
+    raise CodexConfigError(msg)
 
 
 def _render_list(value: list[CodexConfigValue], path: str) -> str:
-    rendered = [to_toml_value(item, f"{path}[{index}]") for index, item in enumerate(value)]
+    rendered = [to_config_value(item, f"{path}[{index}]") for index, item in enumerate(value)]
     return f"[{', '.join(rendered)}]"
 
 
@@ -53,9 +54,9 @@ def _render_object(value: CodexConfigObject, path: str) -> str:
     for key, child in cast("dict[Any, Any]", value).items():
         if not isinstance(key, str) or not key:
             msg = "Codex config override keys must be non-empty strings"
-            raise ValueError(msg)
+            raise CodexConfigError(msg)
         child_path = f"{path}.{key}"
-        parts.append(f"{_format_toml_key(key)} = {to_toml_value(child, child_path)}")
+        parts.append(f"{_format_config_key(key)} = {to_config_value(child, child_path)}")
     return f"{{{', '.join(parts)}}}"
 
 
@@ -68,11 +69,11 @@ def _flatten_config_overrides(
     raw_value: Any = value
     if not _is_plain_object(raw_value):
         if prefix:
-            overrides.append(f"{prefix}={to_toml_value(raw_value, prefix)}")
+            overrides.append(f"{prefix}={to_config_value(raw_value, prefix)}")
             return
 
         msg = "Codex config overrides must be a plain object"
-        raise ValueError(msg)
+        raise CodexConfigError(msg)
 
     entries = list(cast("dict[Any, Any]", raw_value).items())
     if not prefix and not entries:
@@ -84,7 +85,7 @@ def _flatten_config_overrides(
     for key, child in entries:
         if not isinstance(key, str) or not key:
             msg = "Codex config override keys must be non-empty strings"
-            raise ValueError(msg)
+            raise CodexConfigError(msg)
 
         path = f"{prefix}.{key}" if prefix else key
         _flatten_config_overrides(child, path, overrides=overrides)
@@ -94,8 +95,8 @@ def _is_plain_object(value: CodexConfigValue) -> TypeGuard[CodexConfigObject]:
     return isinstance(value, dict)
 
 
-def _format_toml_key(key: str) -> str:
-    return key if _TOML_BARE_KEY.fullmatch(key) else json.dumps(key, ensure_ascii=False)
+def _format_config_key(key: str) -> str:
+    return key if _CONFIG_BARE_KEY.fullmatch(key) else json.dumps(key, ensure_ascii=False)
 
 
 def _to_js_number_string(value: float, path: str) -> str:
@@ -103,11 +104,11 @@ def _to_js_number_string(value: float, path: str) -> str:
         number = float(value)
     except OverflowError as error:
         msg = f"Codex config override at {path} must be a finite number"
-        raise ValueError(msg) from error
+        raise CodexConfigError(msg) from error
 
     if not math.isfinite(number):
         msg = f"Codex config override at {path} must be a finite number"
-        raise ValueError(msg)
+        raise CodexConfigError(msg)
 
     if number == 0:
         return "0"

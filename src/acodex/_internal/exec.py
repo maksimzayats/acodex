@@ -4,8 +4,8 @@ import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, TypedDict
 
+from acodex._internal.config import serialize_config_overrides, to_config_value
 from acodex._internal.constants.exec import INTERNAL_ORIGINATOR_ENV, PYTHON_SDK_ORIGINATOR
-from acodex._internal.toml import serialize_config_overrides, to_toml_value
 from acodex.types.codex_options import CodexConfigObject, CodexConfigValue
 from acodex.types.thread_options import (
     ApprovalMode,
@@ -148,7 +148,7 @@ class CodexExecCLICommandBuilder:
             return
 
         self._command.argv.append("--model")
-        self._command.argv.append(model)
+        self._command.argv.append(str(model))
 
     def _add_sandbox_mode(self) -> None:
         self._seen_args.add("sandbox_mode")
@@ -158,7 +158,7 @@ class CodexExecCLICommandBuilder:
             return
 
         self._command.argv.append("--sandbox")
-        self._command.argv.append(sandbox_mode)
+        self._command.argv.append(str(sandbox_mode))
 
     def _add_working_directory(self) -> None:
         self._seen_args.add("working_directory")
@@ -168,7 +168,7 @@ class CodexExecCLICommandBuilder:
             return
 
         self._command.argv.append("--cd")
-        self._command.argv.append(working_directory)
+        self._command.argv.append(str(working_directory))
 
     def _add_additional_directories(self) -> None:
         self._seen_args.add("additional_directories")
@@ -179,7 +179,7 @@ class CodexExecCLICommandBuilder:
 
         for directory in additional_directories:
             self._command.argv.append("--add-dir")
-            self._command.argv.append(directory)
+            self._command.argv.append(str(directory))
 
     def _add_skip_git_repo_check(self) -> None:
         self._seen_args.add("skip_git_repo_check")
@@ -198,7 +198,7 @@ class CodexExecCLICommandBuilder:
             return
 
         self._command.argv.append("--output-schema")
-        self._command.argv.append(output_schema_file)
+        self._command.argv.append(str(output_schema_file))
 
     def _add_model_reasoning_effort(self) -> None:
         self._seen_args.add("model_reasoning_effort")
@@ -207,7 +207,7 @@ class CodexExecCLICommandBuilder:
         if not model_reasoning_effort:
             return
 
-        self._append_toml_config_override("model_reasoning_effort", model_reasoning_effort)
+        self._append_config_override("model_reasoning_effort", model_reasoning_effort)
 
     def _add_network_access_enabled(self) -> None:
         self._seen_args.add("network_access_enabled")
@@ -216,7 +216,7 @@ class CodexExecCLICommandBuilder:
         if network_access_enabled is None:
             return
 
-        self._append_toml_config_override(
+        self._append_config_override(
             "sandbox_workspace_write.network_access",
             network_access_enabled,
         )
@@ -227,14 +227,14 @@ class CodexExecCLICommandBuilder:
 
         web_search_mode = self._args.get("web_search_mode")
         if web_search_mode:
-            self._append_toml_config_override("web_search", web_search_mode)
+            self._append_config_override("web_search", web_search_mode)
             return
 
         web_search_enabled = self._args.get("web_search_enabled")
         if web_search_enabled is True:
-            self._append_toml_config_override("web_search", "live")
+            self._append_config_override("web_search", "live")
         elif web_search_enabled is False:
-            self._append_toml_config_override("web_search", "disabled")
+            self._append_config_override("web_search", "disabled")
 
     def _add_approval_policy(self) -> None:
         self._seen_args.add("approval_policy")
@@ -243,7 +243,7 @@ class CodexExecCLICommandBuilder:
         if not approval_policy:
             return
 
-        self._append_toml_config_override("approval_policy", approval_policy)
+        self._append_config_override("approval_policy", approval_policy)
 
     def _add_thread_id(self) -> None:
         self._seen_args.add("thread_id")
@@ -266,7 +266,7 @@ class CodexExecCLICommandBuilder:
             self._command.argv.append("--image")
             self._command.argv.append(image)
 
-    def _append_toml_config_override(self, key: str, value: CodexConfigValue) -> None:
-        toml_value = to_toml_value(value, key)
+    def _append_config_override(self, key: str, value: CodexConfigValue) -> None:
+        config_value = to_config_value(value, key)
         self._command.argv.append("--config")
-        self._command.argv.append(f"{key}={toml_value}")
+        self._command.argv.append(f"{key}={config_value}")

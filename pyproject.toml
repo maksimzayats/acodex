@@ -65,15 +65,11 @@ disable_error_code = [
     "unused-ignore",
     "no-any-return",
 ]
-exclude = [
-    "benchmarks/",
-    "examples/",
-]
 
 [[tool.mypy.overrides]]
 module = ["tests.*"]
 strict = false
-disable_error_code = ["valid-type", "misc"]
+disable_error_code = ["valid-type", "misc", "untyped-decorator"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
