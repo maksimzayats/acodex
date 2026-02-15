@@ -51,7 +51,9 @@ jobs:
 
       - name: Vendor latest release
         if: steps.current.outputs.tag != steps.latest.outputs.tag
-        run: make vendor-ts-sdk TAG="${{ steps.latest.outputs.tag }}"
+        env:
+          TAG: ${{ steps.latest.outputs.tag }}
+        run: make vendor-ts-sdk
 
       - name: Read new commit
         if: steps.current.outputs.tag != steps.latest.outputs.tag
