@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from acodex.codex_options import CodexOptions
 from acodex.exec import AsyncCodexExec, CodexExec
 from acodex.thread import AsyncThread, Thread
-from acodex.thread_options import ThreadOptions
+from acodex.types.codex_options import CodexOptions
+from acodex.types.thread_options import ThreadOptions
 
 if TYPE_CHECKING:
     from typing_extensions import Unpack

@@ -17,7 +17,9 @@ classifiers = [
     "Typing :: Typed",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-dependencies = []
+dependencies = [
+    "pydantic>=2",
+]
 
 [project.urls]
 Homepage = "https://github.com/maksimzayats/acodex"

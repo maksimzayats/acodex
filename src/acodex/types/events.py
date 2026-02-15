@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal, TypeAlias
 
-from acodex.items import ThreadItem
+from acodex.types.items import ThreadItem
 
 
 @dataclass(frozen=True, slots=True)

@@ -4,12 +4,15 @@ import asyncio
 import threading
 from typing import TYPE_CHECKING, TypeAlias, TypedDict
 
+from pydantic import BaseModel
+
 if TYPE_CHECKING:
     from typing_extensions import NotRequired
 
 JsonObject: TypeAlias = dict[str, "JsonValue"]
 JsonValue: TypeAlias = str | int | float | bool | None | list["JsonValue"] | JsonObject
 TurnSignal: TypeAlias = threading.Event | asyncio.Event
+OutputSchemaInput: TypeAlias = JsonObject | type[BaseModel]
 
 
 class TurnOptions(TypedDict):
@@ -19,5 +22,5 @@ class TurnOptions(TypedDict):
     Use `threading.Event` for synchronous flows and `asyncio.Event` for asynchronous flows.
     """
 
-    output_schema: NotRequired[JsonObject]
+    output_schema: NotRequired[OutputSchemaInput]
     signal: NotRequired[TurnSignal]

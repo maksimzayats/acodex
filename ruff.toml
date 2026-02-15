@@ -20,9 +20,6 @@ ignore = [
     # Line length (pycodestyle)
     "E501", # Line too long (handled by formatter)
 
-    # Formatter conflicts
-    "COM812", # Trailing comma conflicts with formatter
-
     # Type checking imports (flake8-type-checking)
     "TC001", # Move first-party import into TYPE_CHECKING block
     "TC002", # Move third-party import into TYPE_CHECKING block
