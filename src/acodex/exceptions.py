@@ -19,3 +19,7 @@ class CodexExecError(CodexError):
 
 class CodexThreadRunError(CodexError):
     """Raised when a thread run fails while streaming or parsing events."""
+
+
+class CodexInternalError(CodexError):
+    """Raised when an internal invariant is violated, indicating a bug in acodex."""

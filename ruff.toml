@@ -84,6 +84,8 @@ ignore = [
 
     # Documentation
     "D", # All docstring rules
+
+    "PLC2701",
 ]
 "tmp/**" = [
     # All rules ignored in temporary files

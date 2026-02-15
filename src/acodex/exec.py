@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterator
 
+from acodex._internal.exec import CodexExecArgs
 from acodex.types.codex_options import CodexConfigObject
-from acodex.types.exec import CodexExecArgs
 
 
 class CodexExec:
