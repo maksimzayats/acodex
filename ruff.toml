@@ -37,6 +37,7 @@ ignore = [
     "EM101",
     "EM102",
     "EM103",
+    "B903",
 ]
 
 [lint.per-file-ignores]
