@@ -22,6 +22,7 @@ class Thread:
 
     def __init__(
         self,
+        *,
         exec: CodexExec,  # noqa: A002
         options: CodexOptions,
         thread_options: ThreadOptions,
@@ -73,6 +74,7 @@ class AsyncThread:
 
     def __init__(
         self,
+        *,
         exec: AsyncCodexExec,  # noqa: A002
         options: CodexOptions,
         thread_options: ThreadOptions,

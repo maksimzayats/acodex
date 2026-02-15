@@ -11,6 +11,7 @@ class CodexExec:
 
     def __init__(
         self,
+        *,
         executable_path: str | None = None,
         env: dict[str, str] | None = None,
         config_overrides: CodexConfigObject | None = None,
@@ -30,6 +31,7 @@ class AsyncCodexExec:
 
     def __init__(
         self,
+        *,
         executable_path: str | None = None,
         env: dict[str, str] | None = None,
         config_overrides: CodexConfigObject | None = None,

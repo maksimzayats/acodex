@@ -26,16 +26,20 @@ class Codex:
             config_overrides=self._options.get("config"),
         )
 
-    def start_thread(self, **options: Unpack[ThreadOptions]) -> Thread:
+    def start_thread(self, **thread_options: Unpack[ThreadOptions]) -> Thread:
         """Start a new conversation with an agent.
 
         Returns:
             A new thread instance.
 
         """
-        return Thread(self._exec, self._options, options)
+        return Thread(
+            exec=self._exec,
+            options=self._options,
+            thread_options=thread_options,
+        )
 
-    def resume_thread(self, thread_id: str, **options: Unpack[ThreadOptions]) -> Thread:
+    def resume_thread(self, thread_id: str, **thread_options: Unpack[ThreadOptions]) -> Thread:
         """Resume a conversation with an agent using a thread ID.
 
         Threads are persisted in ``~/.codex/sessions``.
@@ -48,9 +52,9 @@ class Codex:
 
         """
         return Thread(
-            self._exec,
-            self._options,
-            options,
+            exec=self._exec,
+            options=self._options,
+            thread_options=thread_options,
             thread_id=thread_id,
         )
 
@@ -70,14 +74,18 @@ class AsyncCodex:
             config_overrides=self._options.get("config"),
         )
 
-    def start_thread(self, **options: Unpack[ThreadOptions]) -> AsyncThread:
+    def start_thread(self, **thread_options: Unpack[ThreadOptions]) -> AsyncThread:
         """Start a new conversation with an agent.
 
         Returns:
             A new thread instance.
 
         """
-        return AsyncThread(self._exec, self._options, options)
+        return AsyncThread(
+            exec=self._exec,
+            options=self._options,
+            thread_options=thread_options,
+        )
 
     def resume_thread(self, thread_id: str, **options: Unpack[ThreadOptions]) -> AsyncThread:
         """Resume a conversation with an agent using a thread ID.
@@ -92,8 +100,8 @@ class AsyncCodex:
 
         """
         return AsyncThread(
-            self._exec,
-            self._options,
-            options,
+            exec=self._exec,
+            options=self._options,
+            thread_options=options,
             thread_id=thread_id,
         )
