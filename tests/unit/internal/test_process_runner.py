@@ -262,6 +262,78 @@ def test_async_require_stdio_raises_when_streams_missing() -> None:
         AsyncCodexProcessRunner._require_stdio(cast("asyncio.subprocess.Process", process))
 
 
+def test_async_stream_lines_missing_stdio_terminates_process(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = AsyncCodexProcessRunner(executable_path="codex")
+    command = _build_command(mode="stdout_lines")
+    process = _MissingAsyncStdioProcess()
+    terminated: list[object] = []
+
+    async def fake_spawn(_: object) -> asyncio.subprocess.Process:
+        await asyncio.sleep(0)
+        return cast("asyncio.subprocess.Process", process)
+
+    async def fake_terminate(proc: object) -> None:
+        terminated.append(proc)
+        await asyncio.sleep(0)
+
+    async def run() -> None:
+        async for _ in runner.stream_lines(command):
+            pass
+
+    monkeypatch.setattr(runner, "_spawn_process", fake_spawn)
+    monkeypatch.setattr(runner, "_terminate_process", fake_terminate)
+
+    with pytest.raises(CodexExecError, match="spawn failure: missing stdio streams"):
+        _run_async(run())
+
+    assert terminated == [process]
+
+
+def test_async_stream_lines_create_task_failure_terminates_and_closes_stdin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = AsyncCodexProcessRunner(executable_path="codex")
+    command = _build_command(mode="stdout_lines")
+    stdin = _FakeAsyncStdin()
+    process = _AsyncProcessWithStdio(stdin=stdin)
+    terminated: list[object] = []
+    real_create_task = asyncio.create_task
+
+    async def fake_spawn(_: object) -> asyncio.subprocess.Process:
+        await asyncio.sleep(0)
+        return cast("asyncio.subprocess.Process", process)
+
+    async def fake_terminate(proc: object) -> None:
+        terminated.append(proc)
+        await asyncio.sleep(0)
+
+    def fake_create_task(
+        coro: Coroutine[object, object, object],
+        *,
+        name: str | None = None,
+    ) -> asyncio.Task[object]:
+        if name == "acodex-async-stderr-reader":
+            coro.close()
+            raise RuntimeError("boom")
+        return real_create_task(coro, name=name)
+
+    async def run() -> None:
+        async for _ in runner.stream_lines(command):
+            pass
+
+    monkeypatch.setattr(runner, "_spawn_process", fake_spawn)
+    monkeypatch.setattr(runner, "_terminate_process", fake_terminate)
+    monkeypatch.setattr(asyncio, "create_task", fake_create_task)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        _run_async(run())
+
+    assert terminated == [process]
+    assert stdin.close_called
+
+
 def test_async_cancel_during_readline_uses_async_event_wait_path(tmp_path: Path) -> None:
     executable = _create_fake_codex_executable(tmp_path)
     runner = AsyncCodexProcessRunner(executable_path=str(executable))
@@ -488,6 +560,13 @@ class _FakeAsyncProcess:
     returncode = 0
 
 
+class _AsyncProcessWithStdio:
+    def __init__(self, *, stdin: _FakeAsyncStdin) -> None:
+        self.stdin = stdin
+        self.stdout = _UnusedAsyncStdout()
+        self.stderr = _ReadableAsyncStderr()
+
+
 class _FakeAsyncStdin:
     def __init__(self) -> None:
         self.close_called = False
@@ -523,6 +602,24 @@ class _ImmediateAsyncStdout:
     async def readline(self) -> bytes:
         self._read_calls += 1
         return b"ready\n"
+
+
+class _UnusedAsyncStdout:
+    def __init__(self) -> None:
+        self.read_calls = 0
+
+    async def readline(self) -> bytes:
+        self.read_calls += 1
+        return b""
+
+
+class _ReadableAsyncStderr:
+    def __init__(self) -> None:
+        self.read_calls = 0
+
+    async def read(self) -> bytes:
+        self.read_calls += 1
+        return b"stderr"
 
 
 def _run_async(awaitable: Coroutine[object, object, _T]) -> _T:

@@ -260,18 +260,23 @@ class AsyncCodexProcessRunner(CodexProcessRunnerBase):
         self._check_cancelled(command)
 
         process = await self._spawn_process(command)
-        stdio = self._require_stdio(process)
-        stderr_task = asyncio.create_task(
-            stdio.stderr.read(),
-            name="acodex-async-stderr-reader",
-        )
+        stdio: _AsyncStdio | None = None
+        stderr_task: asyncio.Task[bytes] | None = None
 
         try:
+            stdio = self._require_stdio(process)
+            stderr_task = asyncio.create_task(
+                stdio.stderr.read(),
+                name="acodex-async-stderr-reader",
+            )
+
             await self._write_stdin(stdin=stdio.stdin, stdin_text=command.stdin)
             async for line in self._iter_stdout_lines(command=command, stdout=stdio.stdout):
                 yield line
+
             return_code = await process.wait()
             stderr_text = await self._decode_stderr(stderr_task)
+
             self._raise_on_bad_exit(return_code=return_code, stderr=stderr_text)
         except CodexCancelledError:
             await self._terminate_process(process)
@@ -279,7 +284,7 @@ class AsyncCodexProcessRunner(CodexProcessRunnerBase):
         finally:
             await self._cleanup(
                 process=process,
-                stdin=stdio.stdin,
+                stdin=stdio.stdin if stdio is not None else None,
                 stderr_task=stderr_task,
             )
 
@@ -300,18 +305,22 @@ class AsyncCodexProcessRunner(CodexProcessRunnerBase):
         self,
         *,
         process: asyncio.subprocess.Process,
-        stdin: asyncio.StreamWriter,
-        stderr_task: asyncio.Task[bytes],
+        stdin: asyncio.StreamWriter | None,
+        stderr_task: asyncio.Task[bytes] | None,
     ) -> None:
         await self._terminate_process(process)
-        if not stdin.is_closing():
-            stdin.close()
-        with suppress(BrokenPipeError, ConnectionResetError):
-            await stdin.wait_closed()
-        if not stderr_task.done():
-            stderr_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await stderr_task
+
+        if stdin is not None:
+            if not stdin.is_closing():
+                stdin.close()
+            with suppress(BrokenPipeError, ConnectionResetError):
+                await stdin.wait_closed()
+
+        if stderr_task is not None:
+            if not stderr_task.done():
+                stderr_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await stderr_task
 
     @staticmethod
     def _require_stdio(
