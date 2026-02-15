@@ -391,7 +391,7 @@ class AsyncCodexProcessRunner(CodexProcessRunnerBase):
                 stdout.readline(),
                 timeout=_READ_POLL_INTERVAL_SECONDS,
             )
-        except TimeoutError:
+        except asyncio.TimeoutError:
             return _ASYNC_TIMEOUT
 
     @staticmethod
