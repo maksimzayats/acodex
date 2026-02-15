@@ -101,7 +101,7 @@ html_theme_options = {
 
 # ---- Quality of life / navigation -------------------------------------------------
 
-autosummary_generate = True
+autosummary_generate = False
 autodoc_typehints = "none"
 
 intersphinx_mapping = {
@@ -110,7 +110,7 @@ intersphinx_mapping = {
 
 # ---- SEO-ish defaults -------------------------------------------------------------
 
-html_title = "acodex: Python implementation of a codex SDK"
+html_title = "acodex: Python SDK for the Codex CLI"
 
 # If you set a base URL, we'll emit a sitemap and robots.txt (see docs/_extensions/acodex_sitemap.py).
 # Default to the canonical docs domain, but allow contributors to disable by setting ACODEX_DOCS_BASEURL="".
@@ -120,14 +120,10 @@ if html_baseurl:
 
 html_meta = {
     "description": (
-        "acodex is a dependency injection container for Python 3.10+ that builds object graphs "
-        "from type hints alone. Supports scoped lifetimes, async resolution, generator-based "
-        "cleanup, open generics, and zero runtime dependencies."
+        "acodex is a typed Python SDK that wraps the `codex` CLI, providing sync and async clients "
+        "to run agent threads, stream JSONL events, and consume structured items."
     ),
-    "keywords": (
-        "dependency injection, python dependency injection, di container, inversion of control, "
-        "type hints, typed dependency injection, fastapi dependency injection"
-    ),
+    "keywords": ("codex, codex cli, sdk, python, agent, threads, streaming, jsonl, tools"),
 }
 
 # Pyodide runner configuration
