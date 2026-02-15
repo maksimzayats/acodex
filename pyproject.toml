@@ -19,6 +19,7 @@ classifiers = [
 ]
 dependencies = [
     "pydantic>=2",
+    "tomlkit>=0.14.0",
 ]
 
 [project.urls]
