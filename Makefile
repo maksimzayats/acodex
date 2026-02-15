@@ -1,4 +1,4 @@
-.PHONY: format lint test
+.PHONY: format lint test docs
 
 format:
 	uv run ruff format .
@@ -11,3 +11,7 @@ lint:
 
 test:
 	uv run pytest tests/ --cov=src/acodex --cov-report=term-missing
+
+docs:
+	rm -rf docs/_build
+	uv run sphinx-build -b html docs docs/_build/html

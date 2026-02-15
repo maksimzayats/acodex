@@ -92,6 +92,10 @@ ignore = [
     # All rules ignored in temporary files
     "ALL",
 ]
+"docs/**" = [
+    # All rules ignored in temporary files
+    "ALL",
+]
 
 [lint.isort]
 combine-as-imports = true
