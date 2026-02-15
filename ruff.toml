@@ -31,6 +31,10 @@ ignore = [
     # TODO
     "TD003",
     "FIX002",
+
+    "EM101",
+    "EM102",
+    "EM103",
 ]
 
 [lint.per-file-ignores]
@@ -78,10 +82,6 @@ ignore = [
 
     # Documentation
     "D", # All docstring rules
-
-    "EM101",
-    "EM102",
-    "EM103",
 ]
 "tmp/**" = [
     # All rules ignored in temporary files
