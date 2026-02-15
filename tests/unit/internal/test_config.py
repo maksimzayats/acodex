@@ -4,9 +4,19 @@ from typing import cast
 
 import pytest
 
-from acodex._internal.config import _normalize_exponent, to_config_value
+from acodex._internal.config import (
+    _flatten_config_overrides,
+    _normalize_exponent,
+    serialize_config_overrides,
+    to_config_value,
+)
 from acodex.exceptions import CodexConfigError
-from acodex.types.codex_options import CodexConfigValue
+from acodex.types.codex_options import CodexConfigObject, CodexConfigValue
+
+
+def _split_override(override: str) -> tuple[str, str]:
+    path, _, value = override.partition("=")
+    return path, value
 
 
 def test_to_config_value_renders_string_like_json_stringify() -> None:
@@ -56,6 +66,49 @@ def test_to_config_value_renders_nested_array_and_object() -> None:
         to_config_value(value, "value")
         == '{plain = "value", "needs.dot" = {nested-key = [1, true, "x"]}}'
     )
+
+
+def test_config_overrides_nested_dict_flattens_to_dotted_key() -> None:
+    config: CodexConfigObject = {"a": {"b": 1}}
+    flattened: list[str] = []
+
+    _flatten_config_overrides(config, "", overrides=flattened)
+    serialized = serialize_config_overrides(config)
+
+    assert flattened == ["a.b=1"]
+    assert serialized == ["a.b=1"]
+    path, value = _split_override(flattened[0])
+    assert path == "a.b"
+    assert value == "1"
+    assert "a.b=1" in "\n".join(serialized).replace(" ", "")
+
+
+def test_config_overrides_empty_root_dict_emits_no_overrides() -> None:
+    empty: CodexConfigObject = {}
+    flattened: list[str] = []
+
+    _flatten_config_overrides(empty, "", overrides=flattened)
+    serialized = serialize_config_overrides(empty)
+
+    assert flattened == []
+    assert serialized == []
+    assert not "\n".join(serialized)
+
+
+def test_config_overrides_empty_nested_dict_emits_empty_mapping_override() -> None:
+    empty_mapping: dict[str, CodexConfigValue] = {}
+    config: CodexConfigObject = {"a": empty_mapping}
+    flattened: list[str] = []
+
+    _flatten_config_overrides(config, "", overrides=flattened)
+    serialized = serialize_config_overrides(config)
+
+    assert flattened == ["a={}"]
+    assert serialized == ["a={}"]
+    path, value = _split_override(flattened[0])
+    assert path == "a"
+    assert value == "{}"
+    assert "a={}" in "\n".join(serialized).replace(" ", "")
 
 
 def test_to_config_value_rejects_non_finite_number() -> None:
