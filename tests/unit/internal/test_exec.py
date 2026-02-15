@@ -51,6 +51,23 @@ def test_exec_builder_serializes_toml_config_overrides() -> None:
     ]
 
 
+def test_exec_builder_serializes_numeric_overrides_with_js_number_parity() -> None:
+    builder = CodexExecCLICommandBuilder(
+        args=CodexExecArgs(input="hello world"),
+        config_overrides={
+            "small": 1e-7,
+            "threshold": 1e-6,
+        },
+    )
+
+    command = builder.build_command()
+
+    assert _collect_all_config_values(command.argv) == [
+        "small=1e-7",
+        "threshold=0.000001",
+    ]
+
+
 def test_exec_builder_serializes_empty_nested_object_override() -> None:
     builder = CodexExecCLICommandBuilder(
         args=CodexExecArgs(input="hello world"),

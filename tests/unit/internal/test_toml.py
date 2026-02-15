@@ -19,8 +19,21 @@ def test_to_toml_value_renders_numbers_and_booleans() -> None:
 
     assert to_toml_value(42, "value") == "42"
     assert to_toml_value(1.5, "value") == "1.5"
+    assert to_toml_value(1.0, "value") == "1"
     assert to_toml_value(true_value, "value") == "true"
     assert to_toml_value(false_value, "value") == "false"
+
+
+def test_to_toml_value_renders_numbers_with_js_stringification_rules() -> None:
+    assert to_toml_value(-0.0, "value") == "0"
+    assert to_toml_value(1e-7, "value") == "1e-7"
+    assert to_toml_value(1e-6, "value") == "0.000001"
+    assert to_toml_value(1e16, "value") == "10000000000000000"
+    assert to_toml_value(1e21, "value") == "1e+21"
+
+
+def test_to_toml_value_renders_int_with_js_number_parity() -> None:
+    assert to_toml_value(cast("CodexConfigValue", 9007199254740993), "value") == "9007199254740992"
 
 
 def test_to_toml_value_renders_nested_array_and_object() -> None:
@@ -37,6 +50,11 @@ def test_to_toml_value_renders_nested_array_and_object() -> None:
 def test_to_toml_value_rejects_non_finite_number() -> None:
     with pytest.raises(ValueError, match="Codex config override at value must be a finite number"):
         to_toml_value(float("inf"), "value")
+
+
+def test_to_toml_value_rejects_overflow_int_as_non_finite_number() -> None:
+    with pytest.raises(ValueError, match="Codex config override at value must be a finite number"):
+        to_toml_value(cast("CodexConfigValue", 10**400), "value")
 
 
 def test_to_toml_value_rejects_null_value_with_path() -> None:

@@ -3,11 +3,14 @@ from __future__ import annotations
 import json
 import math
 import re
-from typing import Any, TypeGuard, cast
+from decimal import Decimal
+from typing import Any, Final, TypeGuard, cast
 
 from acodex.types.codex_options import CodexConfigObject, CodexConfigValue
 
 _TOML_BARE_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
+_JS_EXPONENTIAL_UPPER_BOUND: Final[float] = 1e21
+_JS_EXPONENTIAL_LOWER_BOUND: Final[float] = 1e-6
 
 
 def serialize_config_overrides(config_overrides: CodexConfigObject) -> list[str]:
@@ -24,12 +27,9 @@ def to_toml_value(value: CodexConfigValue, path: str) -> str:
     if isinstance(raw_value, bool):
         return "true" if raw_value else "false"
     if isinstance(raw_value, int):
-        return str(raw_value)
+        return _to_js_number_string(raw_value, path)
     if isinstance(raw_value, float):
-        if not math.isfinite(raw_value):
-            msg = f"Codex config override at {path} must be a finite number"
-            raise ValueError(msg)
-        return str(raw_value)
+        return _to_js_number_string(raw_value, path)
     if isinstance(raw_value, list):
         return _render_list(raw_value, path)
     if isinstance(raw_value, dict):
@@ -96,3 +96,49 @@ def _is_plain_object(value: CodexConfigValue) -> TypeGuard[CodexConfigObject]:
 
 def _format_toml_key(key: str) -> str:
     return key if _TOML_BARE_KEY.fullmatch(key) else json.dumps(key, ensure_ascii=False)
+
+
+def _to_js_number_string(value: float, path: str) -> str:
+    try:
+        number = float(value)
+    except OverflowError as error:
+        msg = f"Codex config override at {path} must be a finite number"
+        raise ValueError(msg) from error
+
+    if not math.isfinite(number):
+        msg = f"Codex config override at {path} must be a finite number"
+        raise ValueError(msg)
+
+    if number == 0:
+        return "0"
+
+    sign = "-" if number < 0 else ""
+    abs_number = abs(number)
+    decimal_number = Decimal(repr(abs_number))
+
+    if abs_number >= _JS_EXPONENTIAL_UPPER_BOUND or abs_number < _JS_EXPONENTIAL_LOWER_BOUND:
+        mantissa, exponent = format(decimal_number, "e").split("e")
+        if "." in mantissa:
+            mantissa = mantissa.rstrip("0").rstrip(".")
+        normalized_exponent = _normalize_exponent(exponent)
+        return f"{sign}{mantissa}e{normalized_exponent}"
+
+    rendered = format(decimal_number, "f")
+    if "." in rendered:
+        rendered = rendered.rstrip("0").rstrip(".")
+    return f"{sign}{rendered}"
+
+
+def _normalize_exponent(exponent: str) -> str:
+    if exponent.startswith("-"):
+        sign = "-"
+        digits = exponent[1:]
+    elif exponent.startswith("+"):
+        sign = "+"
+        digits = exponent[1:]
+    else:
+        sign = "+"
+        digits = exponent
+
+    normalized_digits = digits.lstrip("0") or "0"
+    return f"{sign}{normalized_digits}"
