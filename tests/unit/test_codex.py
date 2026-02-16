@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from pathlib import Path
 from typing import cast
 
@@ -118,3 +119,32 @@ def test_async_codex_resume_thread_forwards_resume_id(tmp_path: Path) -> None:
     assert payload["resume_id"] == "thread-xyz"
     assert argv[argv.index("resume") + 1] == "thread-xyz"
     assert argv.index("resume") < argv.index("--image")
+
+
+def test_codex_logs_lifecycle_events(caplog: pytest.LogCaptureFixture, tmp_path: Path) -> None:
+    executable = create_fake_codex_executable(tmp_path)
+
+    with caplog.at_level(logging.DEBUG, logger="acodex.codex"):
+        client = Codex(codex_path_override=str(executable))
+        _ = client.start_thread()
+        _ = client.resume_thread("thread-log")
+
+    assert "Initialized Codex client" in caplog.text
+    assert "Starting new thread" in caplog.text
+    assert "Resuming thread: thread-log" in caplog.text
+
+
+def test_async_codex_logs_lifecycle_events(
+    caplog: pytest.LogCaptureFixture,
+    tmp_path: Path,
+) -> None:
+    executable = create_fake_codex_executable(tmp_path)
+
+    with caplog.at_level(logging.DEBUG, logger="acodex.codex"):
+        client = AsyncCodex(codex_path_override=str(executable))
+        _ = client.start_thread()
+        _ = client.resume_thread("async-thread-log")
+
+    assert "Initialized AsyncCodex client" in caplog.text
+    assert "Starting new async thread" in caplog.text
+    assert "Resuming async thread: async-thread-log" in caplog.text

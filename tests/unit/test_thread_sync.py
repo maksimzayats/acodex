@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import sys
 from pathlib import Path
@@ -361,6 +362,43 @@ def test_thread_run_streamed_cleanup_when_build_exec_args_raises(
         next(events)
 
     assert not forced_temp_dir.exists()
+
+
+def test_thread_run_streamed_logs_thread_error_events(
+    caplog: pytest.LogCaptureFixture,
+    tmp_path: Path,
+) -> None:
+    thread = _build_thread(
+        tmp_path,
+        env={
+            "FAKE_CODEX_MODE": "lines",
+            "FAKE_LINES_JSON": json.dumps(
+                [
+                    json.dumps({"type": "thread.started", "thread_id": "thread-log-errors"}),
+                    json.dumps({"type": "error", "message": "stream failure"}),
+                    json.dumps(
+                        {
+                            "type": "turn.completed",
+                            "usage": {
+                                "input_tokens": 1,
+                                "cached_input_tokens": 0,
+                                "output_tokens": 1,
+                            },
+                        },
+                    ),
+                ],
+            ),
+        },
+    )
+
+    with caplog.at_level(logging.WARNING, logger="acodex.thread"):
+        _ = list(thread.run_streamed("hello").events)
+
+    assert (
+        "Received event class=ThreadErrorEvent type=error thread_id=thread-log-errors"
+        in caplog.text
+    )
+    assert "event=ThreadErrorEvent(message='stream failure', type='error')" in caplog.text
 
 
 def test_close_if_possible_is_noop_without_close() -> None:
