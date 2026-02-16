@@ -17,6 +17,10 @@ from acodex.types.items import AgentMessageItem
 from acodex.types.turn_options import OutputSchemaInput
 from tests.unit.fake_codex_executable import create_fake_codex_executable
 
+NOT_CONSUMED_ERROR_MESSAGE = (
+    "streamed.result is unavailable until streamed.events is fully consumed"
+)
+
 
 def test_async_thread_run_streamed_yields_events_and_sets_thread_id(tmp_path: Path) -> None:
     thread = _build_thread(
@@ -34,21 +38,54 @@ def test_async_thread_run_streamed_yields_events_and_sets_thread_id(tmp_path: Pa
     assert thread.id == "async-thread-123"
 
 
-def test_async_thread_run_streamed_result_raises_before_stream_is_consumed(
+def test_async_thread_run_streamed_result_raises_before_consumption_with_exact_message(
     tmp_path: Path,
 ) -> None:
     thread = _build_thread(tmp_path, env={"FAKE_CODEX_MODE": "thread_success"})
 
     async def run() -> None:
         streamed = await thread.run_streamed("hello")
-        with pytest.raises(CodexThreadStreamNotConsumedError, match="fully consumed"):
+        with pytest.raises(CodexThreadStreamNotConsumedError) as error:
             _ = streamed.result
+        assert str(error.value) == NOT_CONSUMED_ERROR_MESSAGE
         await _aclose_if_possible(streamed.events)
 
     asyncio.run(run())
 
 
-def test_async_thread_run_streamed_result_returns_turn_after_stream_exhaustion(
+def test_async_thread_run_streamed_result_raises_after_partial_consumption(
+    tmp_path: Path,
+) -> None:
+    thread = _build_thread(tmp_path, env={"FAKE_CODEX_MODE": "thread_success"})
+
+    async def run() -> None:
+        streamed = await thread.run_streamed("hello")
+        _ = await anext(streamed.events)
+        with pytest.raises(CodexThreadStreamNotConsumedError) as error:
+            _ = streamed.result
+        assert str(error.value) == NOT_CONSUMED_ERROR_MESSAGE
+        await _aclose_if_possible(streamed.events)
+
+    asyncio.run(run())
+
+
+def test_async_thread_run_streamed_result_raises_after_manual_close_before_exhaustion(
+    tmp_path: Path,
+) -> None:
+    thread = _build_thread(tmp_path, env={"FAKE_CODEX_MODE": "thread_success"})
+
+    async def run() -> None:
+        streamed = await thread.run_streamed("hello")
+        _ = await anext(streamed.events)
+        await streamed.events.aclose()
+        with pytest.raises(CodexThreadStreamNotConsumedError) as error:
+            _ = streamed.result
+        assert str(error.value) == NOT_CONSUMED_ERROR_MESSAGE
+
+    asyncio.run(run())
+
+
+def test_async_thread_run_streamed_result_returns_complete_turn_after_full_exhaustion(
     tmp_path: Path,
 ) -> None:
     thread = _build_thread(
@@ -59,18 +96,77 @@ def test_async_thread_run_streamed_result_returns_turn_after_stream_exhaustion(
         },
     )
 
-    async def run() -> tuple[str, int | None, int]:
+    async def run() -> tuple[str, int | None, int, list[str]]:
         streamed = await thread.run_streamed("hello")
         _ = [event async for event in streamed.events]
         turn = streamed.result
         output_tokens = turn.usage.output_tokens if turn.usage is not None else None
-        return turn.final_response, output_tokens, len(turn.items)
+        message_texts = [item.text for item in turn.items if isinstance(item, AgentMessageItem)]
+        return turn.final_response, output_tokens, len(turn.items), message_texts
 
-    final_response, output_tokens, item_count = asyncio.run(run())
+    final_response, output_tokens, item_count, message_texts = asyncio.run(run())
 
     assert final_response == "async final"
     assert output_tokens == 5
     assert item_count == 2
+    assert message_texts == ["draft", "async final"]
+
+
+def test_async_thread_run_streamed_result_is_stable_after_full_exhaustion(tmp_path: Path) -> None:
+    thread = _build_thread(
+        tmp_path,
+        env={
+            "FAKE_CODEX_MODE": "thread_success",
+            "FAKE_RESPONSES_JSON": json.dumps(["draft", "async final"]),
+        },
+    )
+
+    async def run() -> tuple[str, str, int, int, int | None, int | None]:
+        streamed = await thread.run_streamed("hello")
+        _ = [event async for event in streamed.events]
+        first = streamed.result
+        second = streamed.result
+        first_output = first.usage.output_tokens if first.usage is not None else None
+        second_output = second.usage.output_tokens if second.usage is not None else None
+        return (
+            first.final_response,
+            second.final_response,
+            len(first.items),
+            len(second.items),
+            first_output,
+            second_output,
+        )
+
+    (
+        first_final_response,
+        second_final_response,
+        first_item_count,
+        second_item_count,
+        first_output_tokens,
+        second_output_tokens,
+    ) = asyncio.run(run())
+
+    assert first_final_response == second_final_response
+    assert first_item_count == second_item_count
+    assert first_output_tokens == second_output_tokens
+
+
+def test_async_thread_run_streamed_result_raises_after_failed_turn_when_fully_exhausted(
+    tmp_path: Path,
+) -> None:
+    message = "streamed async failure"
+    thread = _build_thread(
+        tmp_path,
+        env={"FAKE_CODEX_MODE": "thread_failed", "FAKE_FAILURE_MESSAGE": message},
+    )
+
+    async def run() -> None:
+        streamed = await thread.run_streamed("hello")
+        _ = [event async for event in streamed.events]
+        _ = streamed.result
+
+    with pytest.raises(CodexThreadRunError, match=re.escape(message)):
+        asyncio.run(run())
 
 
 def test_async_thread_run_returns_completed_turn_with_final_response_and_usage(

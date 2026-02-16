@@ -16,6 +16,10 @@ from acodex.types.items import AgentMessageItem
 from acodex.types.turn_options import OutputSchemaInput
 from tests.unit.fake_codex_executable import create_fake_codex_executable
 
+NOT_CONSUMED_ERROR_MESSAGE = (
+    "streamed.result is unavailable until streamed.events is fully consumed"
+)
+
 
 def test_thread_run_streamed_yields_events_and_sets_thread_id(tmp_path: Path) -> None:
     thread = _build_thread(
@@ -30,18 +34,53 @@ def test_thread_run_streamed_yields_events_and_sets_thread_id(tmp_path: Path) ->
     assert thread.id == "thread-123"
 
 
-def test_thread_run_streamed_result_raises_before_stream_is_consumed(tmp_path: Path) -> None:
+def test_thread_run_streamed_result_raises_before_consumption_with_exact_message(
+    tmp_path: Path,
+) -> None:
     thread = _build_thread(tmp_path, env={"FAKE_CODEX_MODE": "thread_success"})
 
     streamed = thread.run_streamed("hello")
 
-    with pytest.raises(CodexThreadStreamNotConsumedError, match="fully consumed"):
+    with pytest.raises(CodexThreadStreamNotConsumedError) as error:
         _ = streamed.result
+    assert str(error.value) == NOT_CONSUMED_ERROR_MESSAGE
 
     _close_if_possible(streamed.events)
 
 
-def test_thread_run_streamed_result_returns_turn_after_stream_exhaustion(tmp_path: Path) -> None:
+def test_thread_run_streamed_result_raises_after_partial_consumption(tmp_path: Path) -> None:
+    thread = _build_thread(tmp_path, env={"FAKE_CODEX_MODE": "thread_success"})
+
+    streamed = thread.run_streamed("hello")
+    _ = next(streamed.events)
+
+    with pytest.raises(CodexThreadStreamNotConsumedError) as error:
+        _ = streamed.result
+    assert str(error.value) == NOT_CONSUMED_ERROR_MESSAGE
+
+    _close_if_possible(streamed.events)
+
+
+def test_thread_run_streamed_result_raises_after_manual_close_before_exhaustion(
+    tmp_path: Path,
+) -> None:
+    thread = _build_thread(tmp_path, env={"FAKE_CODEX_MODE": "thread_success"})
+
+    streamed = thread.run_streamed("hello")
+    events = streamed.events
+    _ = next(events)
+    close_method = getattr(events, "close", None)
+    assert close_method is not None
+    close_method()
+
+    with pytest.raises(CodexThreadStreamNotConsumedError) as error:
+        _ = streamed.result
+    assert str(error.value) == NOT_CONSUMED_ERROR_MESSAGE
+
+
+def test_thread_run_streamed_result_returns_complete_turn_after_full_exhaustion(
+    tmp_path: Path,
+) -> None:
     thread = _build_thread(
         tmp_path,
         env={
@@ -60,6 +99,45 @@ def test_thread_run_streamed_result_returns_turn_after_stream_exhaustion(tmp_pat
     assert turn.usage.input_tokens == 10
     assert turn.usage.cached_input_tokens == 2
     assert turn.usage.output_tokens == 5
+    message_texts = [item.text for item in turn.items if isinstance(item, AgentMessageItem)]
+    assert len(message_texts) == len(turn.items)
+    assert message_texts == ["draft", "final answer"]
+
+
+def test_thread_run_streamed_result_is_stable_after_full_exhaustion(tmp_path: Path) -> None:
+    thread = _build_thread(
+        tmp_path,
+        env={
+            "FAKE_CODEX_MODE": "thread_success",
+            "FAKE_RESPONSES_JSON": json.dumps(["draft", "final answer"]),
+        },
+    )
+
+    streamed = thread.run_streamed("hello")
+    _ = list(streamed.events)
+
+    first = streamed.result
+    second = streamed.result
+
+    assert first.final_response == second.final_response
+    assert len(first.items) == len(second.items)
+    assert first.usage == second.usage
+
+
+def test_thread_run_streamed_result_raises_after_failed_turn_when_fully_exhausted(
+    tmp_path: Path,
+) -> None:
+    message = "streamed sync failure"
+    thread = _build_thread(
+        tmp_path,
+        env={"FAKE_CODEX_MODE": "thread_failed", "FAKE_FAILURE_MESSAGE": message},
+    )
+
+    streamed = thread.run_streamed("hello")
+    _ = list(streamed.events)
+
+    with pytest.raises(CodexThreadRunError, match=re.escape(message)):
+        _ = streamed.result
 
 
 def test_thread_run_returns_completed_turn_with_final_response_and_usage(tmp_path: Path) -> None:
