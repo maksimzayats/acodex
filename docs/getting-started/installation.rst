@@ -43,7 +43,7 @@ pip:
    pip install acodex
 
 Optional: Structured-output extra for typed structured output
-----------------------------------------------------
+-------------------------------------------------------------
 
 If you want ``output_type=...`` validation via Pydantic, install the extra:
 

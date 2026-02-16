@@ -14,7 +14,7 @@ test:
 
 docs:
 	rm -rf docs/_build
-	uv run sphinx-build -W -b html docs docs/_build/html
+	uv run --group docs sphinx-build -W -b html docs docs/_build/html
 
 vendor-ts-sdk:
 	uv run python tools/vendor/fetch_codex_ts_sdk.py $(if $(TAG),--tag $(TAG),)
