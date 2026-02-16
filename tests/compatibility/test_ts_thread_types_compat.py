@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Iterator
 from dataclasses import fields, is_dataclass
-from typing import get_args, get_type_hints
+from typing import get_args, get_origin, get_type_hints
 
 from acodex.types import events as py_events, input as py_input, items as py_items, turn as py_turn
 from tests.compatibility._assertions import assert_ts_expr_compatible, camel_to_snake
 from tests.compatibility.vendor_ts_sdk import VENDOR_TS_SDK_SRC
 from tools.compatibility.ts_type_alias_parser import extract_exported_type_alias_rhs
-from tools.compatibility.ts_type_expr import TsObject, TsUnion, parse_ts_type_expr
+from tools.compatibility.ts_type_expr import TsGeneric, TsObject, TsUnion, parse_ts_type_expr
 
 
 def test_turn_alias_matches_python_dataclass() -> None:
@@ -63,6 +64,63 @@ def test_input_alias_matches_python_union() -> None:
     ts_rhs = extract_exported_type_alias_rhs(ts_source, "Input")
     ts_expr = parse_ts_type_expr(ts_rhs)
     assert_ts_expr_compatible(ts_expr, py_input.Input, resolver=_resolver)
+
+
+def test_streamed_turn_alias_is_supported_by_python_streamed_results() -> None:
+    ts_source = (VENDOR_TS_SDK_SRC / "thread.ts").read_text(encoding="utf-8")
+    ts_rhs = extract_exported_type_alias_rhs(ts_source, "StreamedTurn")
+    ts_expr = parse_ts_type_expr(ts_rhs)
+    assert isinstance(ts_expr, TsObject), "StreamedTurn must be an object type in TypeScript"
+
+    ts_props = {camel_to_snake(prop.name): prop for prop in ts_expr.properties}
+    assert set(ts_props) == {"events"}, "StreamedTurn must only contain events in TypeScript"
+    events_prop = ts_props["events"]
+    assert isinstance(events_prop.type_expr, TsGeneric), (
+        "StreamedTurn.events must be a generic type"
+    )
+    assert events_prop.type_expr.args, "StreamedTurn.events must have at least one generic argument"
+    ts_event_type = events_prop.type_expr.args[0]
+
+    candidates: list[tuple[type[object], object]] = [
+        (py_turn.AsyncRunStreamedResult, AsyncIterator),
+        (py_turn.RunStreamedResult, Iterator),
+    ]
+    for py_symbol, expected_origin in candidates:
+        assert is_dataclass(py_symbol), f"{py_symbol.__name__} must be a dataclass"
+        py_fields = set(getattr(py_symbol, "__dataclass_fields__", {}).keys())
+        assert "events" in py_fields, f"{py_symbol.__name__} must expose an events field"
+        assert set(ts_props) <= py_fields, (
+            f"{py_symbol.__name__} must include TS StreamedTurn fields: {sorted(ts_props)}"
+        )
+
+        python_only_fields = py_fields - set(ts_props)
+        assert python_only_fields == {"result_factory"}, (
+            f"Unexpected Python-only streamed fields on {py_symbol.__name__}: "
+            f"{sorted(python_only_fields)}"
+        )
+        assert isinstance(getattr(py_symbol, "result", None), property), (
+            f"{py_symbol.__name__} must expose result as a property"
+        )
+
+        orig_bases = getattr(py_symbol, "__orig_bases__", ())
+        streamed_base = next(
+            (base for base in orig_bases if get_origin(base) is py_turn.StreamedTurn),
+            None,
+        )
+        assert streamed_base is not None, (
+            f"{py_symbol.__name__} must specialize StreamedTurn[...] in its bases"
+        )
+        streamed_args = get_args(streamed_base)
+        assert len(streamed_args) == 1, (
+            f"{py_symbol.__name__} must specialize StreamedTurn[EventsT]"
+        )
+        events_hint = streamed_args[0]
+        assert get_origin(events_hint) is expected_origin, (
+            f"{py_symbol.__name__}.events must be a {expected_origin.__name__}[ThreadEvent]"
+        )
+        args = get_args(events_hint)
+        assert len(args) == 1, f"{py_symbol.__name__}.events must have one type argument"
+        assert_ts_expr_compatible(ts_event_type, args[0], resolver=_resolver)
 
 
 def _select_python_user_input_variant(ts_object: TsObject) -> type[object]:

@@ -8,6 +8,15 @@ public API surface.
 If a TypeScript contract changes (new exported type, new option key, discriminator change, etc.),
 the compatibility tests should fail loudly and point to the mismatch.
 
+## What this means for you
+
+- You can follow the Codex TypeScript SDK documentation and expect the same concepts, models, and
+  options in Python (with snake_case naming).
+- Breaking changes in the upstream TS SDK show up quickly as failing CI in this repo (and failing
+  tests in your fork if you run the same suite).
+- When an intentional Pythonic deviation exists, it is documented in `DIFFERENCES.md` and asserted
+  in tests so it does not silently expand over time.
+
 ## Source of truth
 
 - TypeScript SDK (vendored): `vendor/codex-ts-sdk/src/`
@@ -24,7 +33,7 @@ the compatibility tests should fail loudly and point to the mismatch.
   - Client class surface:
     - `vendor/codex-ts-sdk/src/codex.ts`
 
-## What we consider “public surface”
+## What we consider "public surface"
 
 Compatibility is enforced for public exports and their directly referenced contracts:
 
@@ -65,7 +74,7 @@ Current enforced divergences:
   - TS: `TurnOptions.signal?: AbortSignal` in `vendor/codex-ts-sdk/src/turnOptions.ts`
   - Python: `TurnSignal = threading.Event | asyncio.Event` and `TurnOptions.signal` in
     `src/acodex/types/turn_options.py`
-  - Doc: `DIFFERENCES.md` (“Cancellation primitive”)
+  - Doc: `DIFFERENCES.md` ("Cancellation primitive")
   - Test: `tests/compatibility/test_ts_turn_options_compat.py`
 
 - Sync + async dual surface:
@@ -73,7 +82,7 @@ Current enforced divergences:
     an `AsyncGenerator<ThreadEvent>`).
   - Python provides both sync (`Codex`, `Thread`) and async (`AsyncCodex`, `AsyncThread`) surfaces
     while still supporting the TS behavior (async streaming via `AsyncThread.run_streamed`).
-  - Doc: `DIFFERENCES.md` (“Dual sync and async client surfaces”)
+  - Doc: `DIFFERENCES.md` ("Dual sync and async client surfaces")
   - Test: `tests/compatibility/test_ts_class_surface_compat.py`
 
 - Python-only typed structured output:
@@ -81,13 +90,51 @@ Current enforced divergences:
     `structuredResponse`.
   - Python adds optional `output_type` parameters on sync/async `run` + `run_streamed`, plus
     `Turn.structured_response` (backed by Python-only `Turn.structured_response_factory`).
-  - Doc: `DIFFERENCES.md` (“Python-only typed structured output”)
+  - Doc: `DIFFERENCES.md` ("Python-only typed structured output")
   - Tests:
     - `tests/compatibility/test_ts_thread_types_compat.py`
     - `tests/compatibility/test_ts_class_surface_compat.py`
 
 If you add a new divergence, update `DIFFERENCES.md` and add/adjust a compatibility assertion for
 it in `tests/compatibility/`.
+
+## How the automation works
+
+This repo includes an hourly workflow that tracks stable upstream Codex releases and opens a PR
+when a new release is available:
+
+- Workflow: `.github/workflows/codex-ts-sdk-bump.yaml`
+- Schedule: hourly (`cron: "0 * * * *"`)
+- Behavior:
+  - reads the currently pinned upstream tag from `vendor/codex-ts-sdk/UPSTREAM.json`
+  - fetches the latest stable release tag using `tools/vendor/latest_codex_release.py`
+  - runs `make vendor-ts-sdk TAG="<release>"` to vendor the new TS sources
+  - opens a PR on branch `codex/bump-ts-sdk`
+
+In CI, compatibility is enforced via normal test execution (see `.github/workflows/ci.yaml`):
+
+- `uv run pytest tests/ --cov=src/acodex ...`
+- The docs build also runs with warnings-as-errors:
+  - `uv run sphinx-build -W -b html docs docs/_build/html`
+
+## When parity breaks: what to do
+
+When the compatibility suite fails after a TS SDK bump (or after local changes), the quickest
+workflow is:
+
+1. Update the vendored TS SDK:
+   - `make vendor-ts-sdk-latest` (recommended), or
+   - `make vendor-ts-sdk TAG="vX.Y.Z"` if you are targeting a specific release tag
+2. Run the compatibility tests and read the failure output:
+   - `uv run pytest tests/compatibility/`
+3. Fix the Python surface:
+   - update exports (`src/acodex/__init__.py`)
+   - update options payloads (`src/acodex/types/*_options.py`)
+   - update models (`src/acodex/types/events.py`, `src/acodex/types/items.py`, `src/acodex/types/turn.py`)
+   - update class surfaces (`src/acodex/codex.py`, `src/acodex/thread.py`)
+4. If (and only if) the change is an intentional Pythonic divergence:
+   - document it in `DIFFERENCES.md`
+   - add or adjust an assertion in `tests/compatibility/` so the divergence is explicit and stable
 
 ## Name mapping (TS -> Python)
 
@@ -104,7 +151,7 @@ Where it is applied:
   - `tests/compatibility/test_ts_codex_options_compat.py`
   - `tests/compatibility/test_ts_thread_options_compat.py`
   - `tests/compatibility/test_ts_turn_options_compat.py`
-- Thread “Turn” property `finalResponse` (TS) -> `final_response` (Python)
+- Thread "Turn" property `finalResponse` (TS) -> `final_response` (Python)
   - TS: `vendor/codex-ts-sdk/src/thread.ts`
   - Python: `src/acodex/types/turn.py`
   - Test: `tests/compatibility/test_ts_thread_types_compat.py`
@@ -134,7 +181,7 @@ subset parsing + structural comparisons.
 ### External / unresolvable identifiers
 
 If a TS identifier cannot be resolved to an exported type within the Python module resolver for a
-given test, it is treated as “external” and is compatible with Python `object` (or `list[object]`
+given test, it is treated as "external" and is compatible with Python `object` (or `list[object]`
 for arrays).
 
 Example:
@@ -149,7 +196,7 @@ TS uses `?` for optional properties in option payload objects; Python represents
 
 Notes:
 - In `src/acodex/types/*_options.py`, `NotRequired` is imported under `TYPE_CHECKING` so runtime
-  `__required_keys__` may not reflect “optional-only”. The tests therefore evaluate annotations via
+  `__required_keys__` may not reflect "optional-only". The tests therefore evaluate annotations via
   `typing.get_type_hints(..., include_extras=True, localns={"NotRequired": NotRequired, ...})` and
   then assert the presence of `NotRequired[...]` wrappers.
 
@@ -184,7 +231,7 @@ Helper that defines vendor paths:
        - string-literal unions (e.g. `export type ApprovalMode = "never" | ...`)
        - identifier unions (e.g. `export type ThreadEvent = | Foo | Bar`)
      - `extract_exported_type_alias_rhs()` for aliases whose RHS requires more detail than the
-       “object or union of identifiers” model (e.g. `Input`, `UserInput`, recursive config types).
+       "object or union of identifiers" model (e.g. `Input`, `UserInput`, recursive config types).
    - Used by:
      - `tests/compatibility/test_ts_events_compat.py`
      - `tests/compatibility/test_ts_items_compat.py`

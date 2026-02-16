@@ -1,6 +1,8 @@
 # acodex
 
-Typed Python SDK that wraps the `codex` CLI.
+A typed Python SDK for the Codex CLI (sync + async, streaming events, structured output, images).
+
+acodex is a community-maintained wrapper around the Codex CLI and is not affiliated with OpenAI.
 
 [![PyPI version](https://img.shields.io/pypi/v/acodex.svg)](https://pypi.org/project/acodex/)
 [![Python versions](https://img.shields.io/pypi/pyversions/acodex.svg)](https://pypi.org/project/acodex/)
@@ -10,76 +12,86 @@ Typed Python SDK that wraps the `codex` CLI.
 
 ## What is acodex?
 
-acodex is a typed Python SDK that spawns the `codex` CLI and exchanges JSONL events over
-stdin/stdout. It provides both sync (`Codex`, `Thread`) and async (`AsyncCodex`, `AsyncThread`)
-clients, exposes a streaming event API, and supports structured JSON output via JSON Schema.
+acodex spawns the `codex` CLI and exchanges JSONL events over stdin/stdout so you can run agent
+threads from Python with a fully typed surface: sync + async clients, streaming events, structured
+output, image inputs, resumable threads, and safety controls exposed as explicit options.
 
-## Why acodex
+## Install
 
-- Fully typed public API (mypy-friendly).
-- Sync and async client surfaces.
-- Stream parsed `ThreadEvent` objects via `run_streamed()`.
-- Completed turns include `turn.final_response`, `turn.structured_response`, `turn.items`, and
-  `turn.usage`.
-- Attach local images (`UserInputLocalImage`) with stable input normalization for text.
-- Request structured JSON output via `output_schema`.
-- Resume conversations with `resume_thread()` (threads persisted under `~/.codex/sessions`).
-- Cancellation via `threading.Event` / `asyncio.Event` (`TurnOptions.signal`).
+### Prerequisite: Codex CLI
 
-## Installation (uv)
+acodex wraps an external CLI. Install the Codex CLI and ensure `codex` is on your `PATH` (or pass
+`codex_path_override=...` to `Codex(...)` / `AsyncCodex(...)`).
 
-### Prerequisites: Codex CLI
+- Upstream CLI: https://github.com/openai/codex
 
-acodex wraps an external CLI. Ensure `codex` is installed and available on `PATH` (or pass
-`codex_path_override=...` when constructing the client).
-
-One installation option (requires Node.js >=16):
+One installation option:
 
 ```bash
 npm install -g @openai/codex
 codex --version
 ```
 
-### Install acodex
+### Install acodex (uv-first)
 
 ```bash
 uv add acodex
-```
-
-Run a script using the project environment:
-
-```bash
 uv run python your_script.py
 ```
 
 `pip install acodex` also works, but `uv` is recommended.
 
-## Quickstart (sync)
+Recommended for structured output: Pydantic extra (primary pattern via `output_type`):
 
-```python
-from acodex import Codex
-
-codex = Codex()
-thread = codex.start_thread()
-
-schema = {
-    "type": "object",
-    "properties": {"summary": {"type": "string"}},
-    "required": ["summary"],
-    "additionalProperties": False,
-}
-
-turn = thread.run(
-    'Summarize repository health. Return JSON: {"summary": "..."}',
-    output_schema=schema,
-)
-print(turn.structured_response["summary"])
-print(turn.items)
+```bash
+uv add "acodex[pydantic]"
+# or:
+pip install "acodex[pydantic]"
 ```
 
-Call `run()` repeatedly on the same `Thread` instance to continue the conversation.
+## 60-second quickstart (sync)
 
-## Streaming events
+```python
+from pydantic import BaseModel
+
+from acodex import Codex
+
+class SummaryPayload(BaseModel):
+    summary: str
+
+thread = Codex().start_thread(
+    sandbox_mode="read-only",
+    approval_policy="on-request",
+    web_search_mode="disabled",
+)
+turn = thread.run(
+    "Summarize this repo.",
+    output_type=SummaryPayload,
+)
+print(turn.structured_response.summary)
+```
+
+Call `run()` repeatedly on the same `Thread` instance to continue the conversation. To resume later
+from disk, use `Codex().resume_thread(thread_id)`.
+
+## Async quickstart
+
+```python
+import asyncio
+
+from acodex import AsyncCodex
+
+
+async def main() -> None:
+    thread = AsyncCodex().start_thread()
+    turn = await thread.run("Say hello")
+    print(turn.final_response)
+
+
+asyncio.run(main())
+```
+
+## Advanced: stream parsed events
 
 Use `run_streamed()` to react to intermediate progress (tool calls, streaming responses, item
 updates, and final usage).
@@ -89,16 +101,9 @@ from acodex import Codex, ItemCompletedEvent, TurnCompletedEvent, TurnFailedEven
 
 codex = Codex()
 thread = codex.start_thread()
-schema = {
-    "type": "object",
-    "properties": {"summary": {"type": "string"}},
-    "required": ["summary"],
-    "additionalProperties": False,
-}
 
 streamed = thread.run_streamed(
-    'Summarize implementation status. Return JSON: {"summary": "..."}',
-    output_schema=schema,
+    "List the top 3 risks for this codebase. Be concise.",
 )
 for event in streamed.events:
     if isinstance(event, ItemCompletedEvent):
@@ -109,134 +114,44 @@ for event in streamed.events:
         print("error", event.error.message)
 
 turn = streamed.result
-print(turn.structured_response["summary"])
+print(turn.final_response)
 ```
 
 `streamed.result` is available only after `streamed.events` is fully consumed.
 
-## Structured output (`output_schema` + `output_type`)
+## Why acodex
 
-`turn.structured_response` behaves in three modes:
+- **Typed surface**: strict type hints + mypy strict, no runtime deps by default.
+- **Sync + async**: `Codex`/`Thread` and `AsyncCodex`/`AsyncThread`.
+- **Streaming events**: `Thread.run_streamed()` yields parsed `ThreadEvent` dataclasses.
+- **Structured output**: validate into a Pydantic model via `output_type` (recommended), or pass
+  `output_schema` (JSON Schema) for schema-only parity with the TypeScript SDK.
+- **Images**: pass `UserInputLocalImage` alongside text in a single turn.
+- **Resume threads**: `resume_thread(thread_id)` (threads persisted under `~/.codex/sessions`).
+- **Safety controls**: expose Codex CLI controls as `ThreadOptions` (`sandbox_mode`,
+  `approval_policy`, `web_search_mode`, `working_directory`, ...).
+- **TS SDK parity**: vendored TypeScript SDK is the source of truth; compatibility tests fail loudly
+  on drift.
+- **Quality gates**: Ruff + mypy strict + 100% coverage.
 
-- no `output_schema` and no `output_type`: accessing `turn.structured_response` raises
-  `CodexStructuredResponseError`
-- `output_schema` only: accessing `turn.structured_response` parses JSON
-  (`json.loads(final_response)`)
-- `output_type` provided: accessing `turn.structured_response` validates JSON with Pydantic and
-  returns typed data
+## Compatibility & parity (TypeScript SDK)
 
-Structured parsing and validation are lazy and happen only when `turn.structured_response` is
-accessed.
+The vendored TypeScript SDK under `vendor/codex-ts-sdk/src/` is the source of truth. CI runs a
+Python-only compatibility suite that parses those TS sources and asserts the Python exports,
+options keys, events/items models, and class surface stay compatible.
 
-When both are missing, the error message is:
-`No output schema available for validating structured response. Provide an \`output_type\` or \`output_schema\` to enable validation.`
+An hourly workflow checks for new stable Codex releases and opens a PR to bump the vendored SDK:
+`.github/workflows/codex-ts-sdk-bump.yaml`.
 
-Schema-only parsing:
-
-```python
-from acodex import Codex
-
-schema = {
-    "type": "object",
-    "properties": {"summary": {"type": "string"}},
-    "required": ["summary"],
-    "additionalProperties": False,
-}
-
-turn = Codex().start_thread().run("Summarize repository status", output_schema=schema)
-print(turn.structured_response["summary"])
-```
-
-Typed validation with `output_type`:
-
-`output_type` requires the optional Pydantic extra:
-
-```bash
-pip install "acodex[pydantic]"
-```
-
-```python
-from pydantic import BaseModel
-
-from acodex import Codex
-
-
-class SummaryPayload(BaseModel):
-    summary: str
-
-
-turn = Codex().start_thread().run("Summarize repository status", output_type=SummaryPayload)
-print(turn.structured_response.summary)
-```
-
-`CodexStructuredResponseError` is raised when structured parsing or validation fails:
-
-- missing both `output_schema` and `output_type`
-- invalid JSON for `output_schema`-only runs
-- payload that does not match `output_type`
-
-## Images in prompts
-
-Provide structured input entries when you need to include images alongside text.
-
-```python
-from acodex import Codex
-from acodex.types.input import UserInputLocalImage, UserInputText
-
-thread = Codex().start_thread()
-schema = {
-    "type": "object",
-    "properties": {"description": {"type": "string"}},
-    "required": ["description"],
-    "additionalProperties": False,
-}
-turn = thread.run(
-    [
-        UserInputText(text='Describe this image. Return JSON: {"description": "..."}'),
-        UserInputLocalImage(path="./ui.png"),
-    ],
-    output_schema=schema,
-)
-print(turn.structured_response["description"])
-```
-
-## Async (brief)
-
-```python
-import asyncio
-
-from acodex import AsyncCodex
-
-
-async def main() -> None:
-    thread = AsyncCodex().start_thread()
-    schema = {
-        "type": "object",
-        "properties": {"message": {"type": "string"}},
-        "required": ["message"],
-        "additionalProperties": False,
-    }
-    turn = await thread.run(
-        'Say hello from async. Return JSON: {"message": "..."}',
-        output_schema=schema,
-    )
-    print(turn.structured_response["message"])
-
-
-asyncio.run(main())
-```
-
-## Configuration notes
-
-- Client options: `Codex(codex_path_override=..., env=..., config=..., api_key=..., base_url=...)`
-- Thread options: `start_thread(working_directory=..., sandbox_mode=..., approval_policy=..., web_search_mode=...)`
+- Compatibility policy: `COMPATIBILITY.md`
+- Intentional divergences (documented + tested): `DIFFERENCES.md`
+- Contributing: `CONTRIBUTING.md`
 
 ## Links
 
+- Docs: https://docs.acodex.dev
 - GitHub: https://github.com/maksimzayats/acodex
 - Issues: https://github.com/maksimzayats/acodex/issues
-- Docs: https://docs.acodex.dev
-- Differences from TS SDK: `DIFFERENCES.md`
 
 ## License
 

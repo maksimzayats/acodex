@@ -4,10 +4,25 @@ The vendored TypeScript SDK under `vendor/codex-ts-sdk/src/` is the source of tr
 surface. The Python SDK aims for one-to-one feature parity while applying a small number of
 intentional Python-specific adaptations.
 
+## Summary
+
+| Difference | Why | Where |
+| --- | --- | --- |
+| camelCase (TS) -> snake_case (Python) | Python naming conventions | TS: `vendor/codex-ts-sdk/src/*.ts`; Py: `src/acodex/*`; Tests: `tests/compatibility/test_ts_class_surface_compat.py` |
+| options object (TS) -> kwargs (Python) | Python call ergonomics + typing | TS: `*Options.ts`; Py: `src/acodex/{codex,thread}.py`; Tests: `tests/compatibility/test_ts_*_options_compat.py` |
+| `AbortSignal` -> `threading.Event` / `asyncio.Event` | stdlib cancellation primitives | TS: `vendor/codex-ts-sdk/src/turnOptions.ts`; Py: `src/acodex/types/turn_options.py`; Tests: `tests/compatibility/test_ts_turn_options_compat.py` |
+| return models are dataclasses | explicit value objects in Python | TS: `events.ts`, `items.ts`, `thread.ts`; Py: `src/acodex/types/*`; Tests: `tests/compatibility/test_ts_{events,items,thread_types}_compat.py` |
+| dual sync + async surfaces | common Python integration styles | Py: `src/acodex/{codex,thread}.py`; Tests: `tests/compatibility/test_ts_class_surface_compat.py` |
+| dedicated cancellation exception | clearer control flow | Py: `src/acodex/exceptions.py`; Tests: `tests/compatibility/test_ts_turn_options_compat.py`, `tests/unit/internal/test_process_runner.py` |
+| CLI executable discovery via `PATH` | Python packaging constraints | TS: `codexOptions.ts`; Py: `src/acodex/exec.py`; Tests: `tests/compatibility/test_ts_codex_options_compat.py` |
+| narrower `output_schema` typing | stronger Python typing | TS: `turnOptions.ts`; Py: `src/acodex/types/turn_options.py`; Tests: `tests/compatibility/test_ts_turn_options_compat.py` |
+| streamed result exposes `streamed.result` | ergonomic post-stream access | Py: `src/acodex/types/turn.py`; Tests: `tests/compatibility/test_ts_thread_types_compat.py` |
+| Python-only typed structured output | typed validation via Pydantic | Py: `src/acodex/_internal/output_type.py`; Tests: `tests/compatibility/test_ts_class_surface_compat.py` |
+
 These divergences are:
 
 - documented here
-- asserted in `tests/compatibility/` (so changes fail loudly)
+- asserted in `tests/compatibility/` (and unit tests for Python-only behavior) so changes fail loudly
 
 For the broader compatibility policy and test coverage, see `COMPATIBILITY.md`.
 
@@ -161,6 +176,7 @@ References:
 
 - Python exceptions: `src/acodex/exceptions.py`
 - Turn cancellation option: `src/acodex/types/turn_options.py`
+- Tests: `tests/compatibility/test_ts_turn_options_compat.py`, `tests/unit/internal/test_process_runner.py`
 
 Rationale:
 
@@ -181,6 +197,7 @@ References:
 - TS option: `codexPathOverride` in `vendor/codex-ts-sdk/src/codexOptions.ts`
 - Python option: `codex_path_override` in `src/acodex/types/codex_options.py`
 - Python exec setup: `src/acodex/codex.py`, `src/acodex/exec.py`, `src/acodex/_internal/exec.py`
+- Tests: `tests/compatibility/test_ts_codex_options_compat.py`
 
 Rationale:
 
@@ -217,6 +234,8 @@ References:
 
 - Python models: `src/acodex/types/turn.py`
 - Python run flow: `src/acodex/thread.py`
+- Tests: `tests/compatibility/test_ts_thread_types_compat.py`, `tests/unit/test_thread_sync.py`,
+  `tests/unit/test_thread_async.py`
 
 Usage implication:
 
