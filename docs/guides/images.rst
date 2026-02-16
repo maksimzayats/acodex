@@ -9,8 +9,8 @@ When to use this page
 - Your prompt needs a screenshot, diagram, or photo as context.
 - You want to combine text and images in a single turn.
 
-This page uses typed structured output via ``output_type`` (Pydantic extra). Install it first:
-``uv add "acodex[pydantic]"``.
+This page uses typed structured output via ``output_type`` (Structured-output extra). Install it first:
+``uv add "acodex[structured-output]"``.
 
 .. code-block:: python
 

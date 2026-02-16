@@ -13,13 +13,13 @@ When to use this page
 Typed validation (recommended: ``output_type``)
 -----------------------------------------------
 
-``output_type`` requires the optional Pydantic extra:
+``output_type`` requires the optional Structured-output extra:
 
 .. code-block:: bash
 
-   uv add "acodex[pydantic]"
+   uv add "acodex[structured-output]"
    # or:
-   pip install "acodex[pydantic]"
+   pip install "acodex[structured-output]"
 
 .. code-block:: python
 

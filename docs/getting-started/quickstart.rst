@@ -13,7 +13,7 @@ Sync client
 -----------
 
 This example uses typed structured output via a Pydantic model (``output_type``). Install the
-optional extra first: ``uv add "acodex[pydantic]"``.
+optional extra first: ``uv add "acodex[structured-output]"``.
 
 .. code-block:: python
 

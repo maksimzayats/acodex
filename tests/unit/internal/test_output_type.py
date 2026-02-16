@@ -244,7 +244,7 @@ def test_output_type_missing_pydantic_raises_structured_error_with_install_hint(
 
     with pytest.raises(
         CodexStructuredResponseError,
-        match='pip install "acodex\\[pydantic\\]"',
+        match='pip install "acodex\\[structured-output\\]"',
     ) as error:
         OutputTypeAdapter(output_type=_TypedPayload)
 

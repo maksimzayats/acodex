@@ -22,7 +22,7 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-pydantic = [
+structured-output = [
     # python 3.15+ currently has no compatible pydantic release
     "pydantic>=2 ; python_version < '3.15'",
     "jsonref>=1",

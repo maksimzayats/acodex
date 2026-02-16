@@ -24,7 +24,7 @@ name = "acodex"
 source = { editable = "." }
 
 [package.optional-dependencies]
-pydantic = [
+structured-output = [
     { name = "jsonref" },
     { name = "pydantic", marker = "python_full_version < '3.15'" },
 ]
@@ -49,10 +49,10 @@ docs = [
 
 [package.metadata]
 requires-dist = [
-    { name = "jsonref", marker = "extra == 'pydantic'", specifier = ">=1" },
-    { name = "pydantic", marker = "python_full_version < '3.15' and extra == 'pydantic'", specifier = ">=2" },
+    { name = "jsonref", marker = "extra == 'structured-output'", specifier = ">=1" },
+    { name = "pydantic", marker = "python_full_version < '3.15' and extra == 'structured-output'", specifier = ">=2" },
 ]
-provides-extras = ["pydantic"]
+provides-extras = ["structured-output"]
 
 [package.metadata.requires-dev]
 dev = [

@@ -41,12 +41,12 @@ uv run python your_script.py
 
 `pip install acodex` also works, but `uv` is recommended.
 
-Recommended for structured output: Pydantic extra (primary pattern via `output_type`):
+Recommended for structured output: structured-output extra (primary pattern via `output_type`):
 
 ```bash
-uv add "acodex[pydantic]"
+uv add "acodex[structured-output]"
 # or:
-pip install "acodex[pydantic]"
+pip install "acodex[structured-output]"
 ```
 
 ## 60-second quickstart (sync)

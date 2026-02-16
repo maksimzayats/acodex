@@ -42,13 +42,13 @@ pip:
 
    pip install acodex
 
-Optional: Pydantic extra for typed structured output
+Optional: Structured-output extra for typed structured output
 ----------------------------------------------------
 
 If you want ``output_type=...`` validation via Pydantic, install the extra:
 
 .. code-block:: bash
 
-   uv add "acodex[pydantic]"
+   uv add "acodex[structured-output]"
    # or:
-   pip install "acodex[pydantic]"
+   pip install "acodex[structured-output]"

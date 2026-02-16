@@ -24,8 +24,8 @@ Structured output errors
 If you see ``CodexStructuredResponseError`` when accessing ``turn.structured_response``:
 
 - Ensure your prompt actually returns JSON matching the schema/model.
-- If using ``output_type``, ensure you installed the extra: ``uv add "acodex[pydantic]"`` (or
-  ``pip install "acodex[pydantic]"``).
+- If using ``output_type``, ensure you installed the extra: ``uv add "acodex[structured-output]"`` (or
+  ``pip install "acodex[structured-output]"``).
 
 Streamed result accessed too early
 ----------------------------------

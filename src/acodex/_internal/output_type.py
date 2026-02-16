@@ -22,7 +22,7 @@ def _build_type_adapter(output_type: type[T]) -> TypeAdapter[T]:
         if error.name == "pydantic":
             raise CodexStructuredResponseError(
                 "Structured output with `output_type` requires Pydantic. "
-                'Install it with: pip install "acodex[pydantic]".',
+                'Install it with: pip install "acodex[structured-output]".',
             ) from error
         raise
 
