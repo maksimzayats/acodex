@@ -75,18 +75,18 @@ Use `run_streamed()` to react to intermediate progress (tool calls, streaming re
 updates, and final usage).
 
 ```python
-from acodex import Codex
+from acodex import Codex, ItemCompletedEvent, TurnCompletedEvent, TurnFailedEvent
 
 codex = Codex()
 thread = codex.start_thread()
 
 streamed = thread.run_streamed("Implement the fix")
 for event in streamed.events:
-    if event.type == "item.completed":
+    if isinstance(event, ItemCompletedEvent):
         print("item", event.item)
-    elif event.type == "turn.completed":
+    elif isinstance(event, TurnCompletedEvent):
         print("usage", event.usage)
-    elif event.type == "turn.failed":
+    elif isinstance(event, TurnFailedEvent):
         print("error", event.error.message)
 
 turn = streamed.result
