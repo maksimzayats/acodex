@@ -27,6 +27,10 @@ Repository = "https://github.com/maksimzayats/acodex"
 Issues = "https://github.com/maksimzayats/acodex/issues"
 
 [dependency-groups]
+pydantic = [
+    # python 3.15+ currently has no compatible pydantic release
+    "pydantic>=2 ; python_version < '3.15'",
+]
 dev = [
     "mypy>=1.19.1",
     "prek>=0.3.2",
