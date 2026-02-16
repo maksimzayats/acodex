@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import types
 from dataclasses import MISSING, Field, fields, is_dataclass
-from typing import Literal, get_args, get_origin, get_type_hints
+from typing import Literal, Union, get_args, get_origin, get_type_hints
 
 from acodex.types import events as py_events, items as py_items
+from tests.compatibility._assertions import assert_ts_expr_compatible
 from tests.compatibility.vendor_ts_sdk import VENDOR_TS_SDK_SRC
 from tools.compatibility.ts_type_alias_parser import TsAlias, parse_exported_type_aliases
+from tools.compatibility.ts_type_expr import parse_ts_type_expr
 
 
 def test_events_aliases_exist_in_python_sdk() -> None:
@@ -69,6 +72,12 @@ def test_events_object_aliases_match_dataclass_shapes() -> None:
                     f"{alias_name}.{property_name} is required in TS but optional in Python"
                 )
 
+            ts_expr = parse_ts_type_expr(ts_property.type_expr)
+            py_hint: object = type_hints[property_name]
+            if ts_property.optional:
+                py_hint = _strip_optional_none(py_hint)
+            assert_ts_expr_compatible(ts_expr, py_hint, resolver=_resolver)
+
 
 def test_events_cross_type_references_match_python_types() -> None:
     turn_completed_hints = get_type_hints(py_events.TurnCompletedEvent, include_extras=True)
@@ -112,6 +121,25 @@ def _load_event_aliases() -> dict[str, TsAlias]:
 
 def _is_required_dataclass_field(field_info: Field[object]) -> bool:
     return field_info.default is MISSING and field_info.default_factory is MISSING
+
+
+def _strip_optional_none(annotation: object) -> object:
+    origin = get_origin(annotation)
+    if origin not in {Union, types.UnionType}:
+        return annotation
+    args = get_args(annotation)
+    non_none = tuple(arg for arg in args if arg is not type(None))
+    if len(non_none) == 1:
+        return non_none[0]
+    return annotation
+
+
+def _resolver(name: str) -> object | None:
+    if hasattr(py_events, name):
+        return getattr(py_events, name)
+    if hasattr(py_items, name):
+        return getattr(py_items, name)
+    return None
 
 
 def _parse_string_literal(type_expr: str) -> str | None:
