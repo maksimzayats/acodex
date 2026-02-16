@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from pathlib import Path
 from typing import cast
 
+import pytest
+
 from acodex.codex import AsyncCodex, Codex
+from acodex.exceptions import CodexStructuredResponseError
 from acodex.types.input import UserInputLocalImage, UserInputText
 from tests.unit.fake_codex_executable import create_fake_codex_executable
 
@@ -26,7 +30,14 @@ def test_codex_start_thread_runs_with_fake_executable(tmp_path: Path) -> None:
 
     assert thread.id == "codex-thread-sync"
     assert turn.final_response == "sync response"
-    assert turn.structured_response == "sync response"
+    with pytest.raises(
+        CodexStructuredResponseError,
+        match=(
+            "No output schema available for validating structured response\\. "
+            "Provide an `output_type` or `output_schema` to enable validation\\."
+        ),
+    ):
+        _ = turn.structured_response
 
 
 def test_codex_resume_thread_forwards_resume_id(tmp_path: Path) -> None:
@@ -64,16 +75,23 @@ def test_async_codex_start_thread_runs_with_fake_executable(tmp_path: Path) -> N
         },
     )
 
-    async def run() -> tuple[str | None, str, str]:
+    async def run() -> tuple[str | None, str]:
         thread = client.start_thread()
         turn = await thread.run("hello")
-        return thread.id, turn.final_response, turn.structured_response
+        with pytest.raises(
+            CodexStructuredResponseError,
+            match=(
+                "No output schema available for validating structured response\\. "
+                "Provide an `output_type` or `output_schema` to enable validation\\."
+            ),
+        ):
+            _ = turn.structured_response
+        return thread.id, turn.final_response
 
-    thread_id, final_response, structured_response = asyncio.run(run())
+    thread_id, final_response = asyncio.run(run())
 
     assert thread_id == "codex-thread-async"
     assert final_response == "async response"
-    assert structured_response == "async response"
 
 
 def test_async_codex_resume_thread_forwards_resume_id(tmp_path: Path) -> None:
@@ -101,3 +119,32 @@ def test_async_codex_resume_thread_forwards_resume_id(tmp_path: Path) -> None:
     assert payload["resume_id"] == "thread-xyz"
     assert argv[argv.index("resume") + 1] == "thread-xyz"
     assert argv.index("resume") < argv.index("--image")
+
+
+def test_codex_logs_lifecycle_events(caplog: pytest.LogCaptureFixture, tmp_path: Path) -> None:
+    executable = create_fake_codex_executable(tmp_path)
+
+    with caplog.at_level(logging.DEBUG, logger="acodex.codex"):
+        client = Codex(codex_path_override=str(executable))
+        _ = client.start_thread()
+        _ = client.resume_thread("thread-log")
+
+    assert "Initialized Codex client" in caplog.text
+    assert "Starting new thread" in caplog.text
+    assert "Resuming thread: thread-log" in caplog.text
+
+
+def test_async_codex_logs_lifecycle_events(
+    caplog: pytest.LogCaptureFixture,
+    tmp_path: Path,
+) -> None:
+    executable = create_fake_codex_executable(tmp_path)
+
+    with caplog.at_level(logging.DEBUG, logger="acodex.codex"):
+        client = AsyncCodex(codex_path_override=str(executable))
+        _ = client.start_thread()
+        _ = client.resume_thread("async-thread-log")
+
+    assert "Initialized AsyncCodex client" in caplog.text
+    assert "Starting new async thread" in caplog.text
+    assert "Resuming async thread: async-thread-log" in caplog.text

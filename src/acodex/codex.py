@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from acodex.exec import AsyncCodexExec, CodexExec
@@ -9,6 +10,9 @@ from acodex.types.thread_options import ThreadOptions
 
 if TYPE_CHECKING:
     from typing_extensions import Unpack
+
+
+logger = logging.getLogger(__name__)
 
 
 class Codex:
@@ -25,6 +29,12 @@ class Codex:
             env=self._options.get("env"),
             config_overrides=self._options.get("config"),
         )
+        logger.info(
+            "Initialized Codex client (path_override=%s, env_overrides=%s, config_overrides=%s)",
+            self._options.get("codex_path_override") is not None,
+            self._options.get("env") is not None,
+            self._options.get("config") is not None,
+        )
 
     def start_thread(self, **thread_options: Unpack[ThreadOptions]) -> Thread:
         """Start a new conversation with an agent.
@@ -33,6 +43,8 @@ class Codex:
             A new thread instance.
 
         """
+        logger.info("Starting new thread")
+        logger.debug("Thread options for start_thread: %s", sorted(thread_options))
         return Thread(
             exec=self._exec,
             options=self._options,
@@ -51,6 +63,8 @@ class Codex:
             A new thread instance.
 
         """
+        logger.info("Resuming thread: %s", thread_id)
+        logger.debug("Thread options for resume_thread: %s", sorted(thread_options))
         return Thread(
             exec=self._exec,
             options=self._options,
@@ -73,6 +87,12 @@ class AsyncCodex:
             env=self._options.get("env"),
             config_overrides=self._options.get("config"),
         )
+        logger.info(
+            "Initialized AsyncCodex client (path_override=%s, env_overrides=%s, config_overrides=%s)",
+            self._options.get("codex_path_override") is not None,
+            self._options.get("env") is not None,
+            self._options.get("config") is not None,
+        )
 
     def start_thread(self, **thread_options: Unpack[ThreadOptions]) -> AsyncThread:
         """Start a new conversation with an agent.
@@ -81,6 +101,8 @@ class AsyncCodex:
             A new thread instance.
 
         """
+        logger.info("Starting new async thread")
+        logger.debug("Thread options for async start_thread: %s", sorted(thread_options))
         return AsyncThread(
             exec=self._exec,
             options=self._options,
@@ -99,6 +121,8 @@ class AsyncCodex:
             A new thread instance.
 
         """
+        logger.info("Resuming async thread: %s", thread_id)
+        logger.debug("Thread options for async resume_thread: %s", sorted(options))
         return AsyncThread(
             exec=self._exec,
             options=self._options,

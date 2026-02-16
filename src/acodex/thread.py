@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
@@ -17,7 +18,12 @@ from acodex._internal.thread_core import (
 from acodex.exceptions import CodexThreadStreamNotConsumedError
 from acodex.exec import AsyncCodexExec, CodexExec
 from acodex.types.codex_options import CodexOptions
-from acodex.types.events import ThreadEvent, ThreadStartedEvent
+from acodex.types.events import (
+    ThreadErrorEvent,
+    ThreadEvent,
+    ThreadStartedEvent,
+    TurnFailedEvent,
+)
 from acodex.types.input import Input
 from acodex.types.thread_options import ThreadOptions
 from acodex.types.turn import AsyncRunStreamedResult, RunResult, RunStreamedResult
@@ -27,6 +33,9 @@ if TYPE_CHECKING:
     T = TypeVar("T", default=Any)
 else:
     T = TypeVar("T")
+
+
+logger = logging.getLogger(__name__)
 
 
 class Thread:
@@ -47,6 +56,7 @@ class Thread:
         self._options = options
         self._id = thread_id
         self._thread_options = thread_options
+        logger.debug("Created Thread instance (thread_id=%s)", self._id)
 
     @property
     def id(self) -> str | None:
@@ -71,6 +81,12 @@ class Thread:
             A streamed turn result with an iterator of parsed events.
 
         """
+        logger.info(
+            "Starting streamed turn request (thread_id=%s, output_type=%s, output_schema=%s)",
+            self._id,
+            output_type is not None,
+            turn_options.get("output_schema") is not None,
+        )
         state = initial_turn_state()
         stream_completed = False
 
@@ -108,14 +124,29 @@ class Thread:
 
                     if isinstance(event, ThreadStartedEvent):
                         self._id = event.thread_id
+                        logger.info("Assigned thread ID from event stream: %s", self._id)
 
+                    log_method = (
+                        logger.warning
+                        if isinstance(event, (TurnFailedEvent, ThreadErrorEvent))
+                        else logger.debug
+                    )
+                    log_method(
+                        "Received event class=%s type=%s thread_id=%s event=%r",
+                        event.__class__.__name__,
+                        event.type,
+                        self._id,
+                        event,
+                    )
                     state = reduce_turn_state(state, event)
                     yield event
                 stream_completed = True
+                logger.info("Completed streamed turn request (thread_id=%s)", self._id)
             finally:
                 if line_stream is not None:
                     _close_if_possible(line_stream)
                 schema_file.cleanup()
+                logger.debug("Cleaned up streamed turn resources (thread_id=%s)", self._id)
 
         return RunStreamedResult(events=event_generator(), result_factory=build_result)
 
@@ -134,6 +165,7 @@ class Thread:
             The completed turn with reduced items, final response, and usage.
 
         """
+        logger.info("Running turn request to completion (thread_id=%s)", self._id)
         streamed = self.run_streamed(input, output_type=output_type, **turn_options)
         events = streamed.events
         try:
@@ -142,6 +174,7 @@ class Thread:
         finally:
             _close_if_possible(events)
 
+        logger.info("Completed turn request (thread_id=%s)", self._id)
         return streamed.result
 
 
@@ -163,6 +196,7 @@ class AsyncThread:
         self._options = options
         self._id = thread_id
         self._thread_options = thread_options
+        logger.debug("Created AsyncThread instance (thread_id=%s)", self._id)
 
     @property
     def id(self) -> str | None:
@@ -187,6 +221,12 @@ class AsyncThread:
             A streamed turn result with an async iterator of parsed events.
 
         """
+        logger.info(
+            "Starting async streamed turn request (thread_id=%s, output_type=%s, output_schema=%s)",
+            self._id,
+            output_type is not None,
+            turn_options.get("output_schema") is not None,
+        )
         state = initial_turn_state()
         stream_completed = False
 
@@ -224,14 +264,29 @@ class AsyncThread:
 
                     if isinstance(event, ThreadStartedEvent):
                         self._id = event.thread_id
+                        logger.info("Assigned async thread ID from event stream: %s", self._id)
 
+                    log_method = (
+                        logger.warning
+                        if isinstance(event, (TurnFailedEvent, ThreadErrorEvent))
+                        else logger.debug
+                    )
+                    log_method(
+                        "Received event class=%s type=%s thread_id=%s event=%r",
+                        event.__class__.__name__,
+                        event.type,
+                        self._id,
+                        event,
+                    )
                     state = reduce_turn_state(state, event)
                     yield event
                 stream_completed = True
+                logger.info("Completed async streamed turn request (thread_id=%s)", self._id)
             finally:
                 if line_stream is not None:
                     await _aclose_if_possible(line_stream)
                 schema_file.cleanup()
+                logger.debug("Cleaned up async streamed turn resources (thread_id=%s)", self._id)
 
         return AsyncRunStreamedResult(events=event_generator(), result_factory=build_result)
 
@@ -250,6 +305,7 @@ class AsyncThread:
             The completed turn with reduced items, final response, and usage.
 
         """
+        logger.info("Running async turn request to completion (thread_id=%s)", self._id)
         streamed = await self.run_streamed(input, output_type=output_type, **turn_options)
         events = streamed.events
         try:
@@ -258,6 +314,7 @@ class AsyncThread:
         finally:
             await _aclose_if_possible(events)
 
+        logger.info("Completed async turn request (thread_id=%s)", self._id)
         return streamed.result
 
 

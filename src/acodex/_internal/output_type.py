@@ -20,12 +20,26 @@ def _build_type_adapter(output_type: type[T]) -> TypeAdapter[T]:
         if error.name == "pydantic":
             raise CodexStructuredResponseError(
                 "Structured output with `output_type` requires Pydantic. "
-                'Install it with: pip install "acodex[pydantic]".',
+                'Install it with: pip install "acodex[structured-output]".',
             ) from error
         raise
 
     type_adapter = pydantic_module.TypeAdapter
     return cast("TypeAdapter[T]", type_adapter(type=output_type))
+
+
+def _replace_refs(schema: OutputSchemaInput) -> OutputSchemaInput:
+    try:
+        jsonref_module = importlib.import_module("jsonref")
+    except ModuleNotFoundError as error:
+        if error.name == "jsonref":
+            raise CodexStructuredResponseError(
+                "Structured output with `output_type` requires jsonref. "
+                'Install it with: pip install "acodex[structured-output]".',
+            ) from error
+        raise
+
+    return jsonref_module.replace_refs(schema, base_uri="", proxies=False)
 
 
 class OutputTypeAdapter(Generic[T]):
@@ -50,9 +64,9 @@ class OutputTypeAdapter(Generic[T]):
             return None
 
         schema = self._adapter.json_schema()
-        schema.setdefault("additionalProperties", False)
+        self._ensure_additional_properties_is_false(schema)
 
-        return schema
+        return _replace_refs(schema)
 
     def validate_json(self, json_string: str | bytes | bytearray) -> T:
         if self._adapter is not None:
@@ -71,4 +85,20 @@ class OutputTypeAdapter(Generic[T]):
                     "Failed to parse structured response as JSON.",
                 ) from error
 
-        return cast("T", json_string)
+        raise CodexStructuredResponseError(
+            "No output schema available for validating structured response. "
+            "Provide an `output_type` or `output_schema` to enable validation.",
+        )
+
+    def _ensure_additional_properties_is_false(self, schema: OutputSchemaInput) -> None:
+        """Recursively set `additionalProperties` to `False` in the provided JSON schema and all nested subschemas."""
+        if schema.get("type") == "object":
+            schema["additionalProperties"] = False
+
+        for value in schema.values():
+            if isinstance(value, dict):
+                self._ensure_additional_properties_is_false(value)
+            elif isinstance(value, list):
+                for item in value:
+                    if isinstance(item, dict):
+                        self._ensure_additional_properties_is_false(item)

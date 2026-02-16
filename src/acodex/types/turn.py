@@ -21,7 +21,12 @@ class Turn(Generic[T]):
     items: list[ThreadItem]
     final_response: str
     usage: Usage | None
-    structured_response: T
+    structured_response_factory: Callable[[], T] = field(repr=False, compare=False)
+
+    @property
+    def structured_response(self) -> T:
+        """Return the structured response."""
+        return self.structured_response_factory()
 
 
 @dataclass(frozen=True, slots=True)

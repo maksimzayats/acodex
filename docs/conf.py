@@ -72,6 +72,7 @@ release, version = _resolve_docs_versions(_resolve_metadata_release(), _ROOT)
 extensions: list[str] = [
     # Built-in Sphinx extensions
     "sphinx.ext.autodoc",
+    "sphinx.ext.autosectionlabel",
     "sphinx.ext.autosummary",
     "sphinx.ext.intersphinx",
     "sphinx.ext.napoleon",
@@ -103,6 +104,16 @@ html_theme_options = {
 
 autosummary_generate = False
 autodoc_typehints = "none"
+autosectionlabel_prefix_document = True
+
+rst_prolog = """
+.. |project| replace:: acodex
+.. |codex_cli_repo| replace:: `Codex CLI <https://github.com/openai/codex>`__
+.. |project_repo| replace:: `GitHub <https://github.com/maksimzayats/acodex>`__
+.. |project_issues| replace:: `Issues <https://github.com/maksimzayats/acodex/issues>`__
+.. |project_docs| replace:: `docs.acodex.dev <https://docs.acodex.dev>`__
+.. |acodex_affiliation_disclaimer| replace:: acodex is an independently maintained SDK for the Codex CLI and is not affiliated with, sponsored by, or endorsed by OpenAI.
+"""
 
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
@@ -110,7 +121,7 @@ intersphinx_mapping = {
 
 # ---- SEO-ish defaults -------------------------------------------------------------
 
-html_title = "acodex: Python SDK for the Codex CLI"
+html_title = "acodex: typed Python SDK for the Codex CLI"
 
 # If you set a base URL, we'll emit a sitemap and robots.txt (see docs/_extensions/acodex_sitemap.py).
 # Default to the canonical docs domain, but allow contributors to disable by setting ACODEX_DOCS_BASEURL="".
@@ -120,10 +131,13 @@ if html_baseurl:
 
 html_meta = {
     "description": (
-        "acodex is a typed Python SDK that wraps the `codex` CLI, providing sync and async clients "
-        "to run agent threads, stream JSONL events, and consume structured items."
+        "acodex is a typed Python SDK for the Codex CLI: sync + async clients, streaming events, "
+        "structured output, image inputs, and compatibility with the vendored TypeScript SDK."
     ),
-    "keywords": ("codex, codex cli, sdk, python, agent, threads, streaming, jsonl, tools"),
+    "keywords": (
+        "codex, codex cli, python sdk, typed, mypy, streaming, jsonl, structured output, "
+        "json schema, pydantic, agent, threads"
+    ),
 }
 
 # Pyodide runner configuration

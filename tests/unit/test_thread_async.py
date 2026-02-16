@@ -195,15 +195,22 @@ def test_async_thread_run_returns_completed_turn_with_final_response_and_usage(
         },
     )
 
-    async def run() -> tuple[str, str, int | None]:
+    async def run() -> tuple[str, int | None]:
         turn = await thread.run("hello")
         output_tokens = turn.usage.output_tokens if turn.usage is not None else None
-        return turn.final_response, turn.structured_response, output_tokens
+        with pytest.raises(
+            CodexStructuredResponseError,
+            match=(
+                "No output schema available for validating structured response\\. "
+                "Provide an `output_type` or `output_schema` to enable validation\\."
+            ),
+        ):
+            _ = turn.structured_response
+        return turn.final_response, output_tokens
 
-    final_response, structured_response, output_tokens = asyncio.run(run())
+    final_response, output_tokens = asyncio.run(run())
 
     assert final_response == "async final"
-    assert structured_response == final_response
     assert output_tokens == 5
 
 
@@ -242,6 +249,7 @@ def test_async_thread_run_validates_payload_when_output_type_is_provided(tmp_pat
     assert payload == {"status": "ok", "count": 1}
 
 
+@skip_output_type_tests_on_py315
 def test_async_thread_run_raises_on_invalid_output_type_payload(tmp_path: Path) -> None:
     thread = _build_thread(
         tmp_path,
@@ -252,10 +260,11 @@ def test_async_thread_run_raises_on_invalid_output_type_payload(tmp_path: Path) 
     )
 
     async def run() -> None:
-        await thread.run("hello", output_type=_StructuredPayload)
+        turn = await thread.run("hello", output_type=_StructuredPayload)
+        with pytest.raises(CodexStructuredResponseError):
+            _ = turn.structured_response
 
-    with pytest.raises(CodexStructuredResponseError):
-        asyncio.run(run())
+    asyncio.run(run())
 
 
 def test_async_thread_run_raises_on_invalid_json_with_output_schema_only(tmp_path: Path) -> None:
@@ -268,10 +277,11 @@ def test_async_thread_run_raises_on_invalid_json_with_output_schema_only(tmp_pat
     )
 
     async def run() -> None:
-        await thread.run("hello", output_schema={"type": "object"})
+        turn = await thread.run("hello", output_schema={"type": "object"})
+        with pytest.raises(CodexStructuredResponseError):
+            _ = turn.structured_response
 
-    with pytest.raises(CodexStructuredResponseError):
-        asyncio.run(run())
+    asyncio.run(run())
 
 
 def test_async_thread_run_drains_events_after_turn_failed(tmp_path: Path) -> None:

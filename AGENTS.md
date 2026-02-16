@@ -58,7 +58,7 @@ testing standards. Prefer uv for all tooling.
 - mypy is strict; keep types precise and avoid `Any`.
 - If `Any` is unavoidable, document why and keep scope minimal.
 - Do not use generic `object` annotations when domain types already exist (for example, prefer `CodexConfigObject` / `CodexConfigValue`).
-- Do not use `| object` unions in new annotations; introduce a dedicated sentinel/type instead, or use Any.
+- Do not use `| object` unions in new annotations - use Any instead.
 - Use `typing.Protocol` or `collections.abc` for public contracts.
 - Prefer `Final` for constants that should not change.
 
