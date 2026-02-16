@@ -269,3 +269,48 @@ def test_output_type_re_raises_non_pydantic_module_not_found(
         OutputTypeAdapter(output_type=_TypedPayload)
 
     assert error.value.name == "pydantic_core"
+
+
+@skip_output_type_tests_on_py315
+def test_json_schema_missing_jsonref_raises_structured_error_with_install_hint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_import_module = importlib.import_module
+
+    def _import_module(name: str, package: str | None = None) -> object:
+        if name == "jsonref":
+            raise ModuleNotFoundError("No module named 'jsonref'", name="jsonref")
+        return real_import_module(name, package)
+
+    monkeypatch.setattr(output_type_module.importlib, "import_module", _import_module)
+    adapter: OutputTypeAdapter[_TypedPayload] = OutputTypeAdapter(output_type=_TypedPayload)
+
+    with pytest.raises(
+        CodexStructuredResponseError,
+        match='pip install "acodex\\[structured-output\\]"',
+    ) as error:
+        adapter.json_schema()
+
+    cause = error.value.__cause__
+    assert isinstance(cause, ModuleNotFoundError)
+    assert cause.name == "jsonref"
+
+
+@skip_output_type_tests_on_py315
+def test_json_schema_re_raises_non_jsonref_module_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_import_module = importlib.import_module
+
+    def _import_module(name: str, package: str | None = None) -> object:
+        if name == "jsonref":
+            raise ModuleNotFoundError("No module named 'jsonref'", name="some_other_dep")
+        return real_import_module(name, package)
+
+    monkeypatch.setattr(output_type_module.importlib, "import_module", _import_module)
+    adapter: OutputTypeAdapter[_TypedPayload] = OutputTypeAdapter(output_type=_TypedPayload)
+
+    with pytest.raises(ModuleNotFoundError) as error:
+        adapter.json_schema()
+
+    assert error.value.name == "some_other_dep"

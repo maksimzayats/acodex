@@ -4,8 +4,6 @@ import importlib
 import json
 from typing import TYPE_CHECKING, Generic, TypeVar, cast
 
-import jsonref
-
 from acodex.exceptions import CodexStructuredResponseError
 from acodex.types.turn_options import OutputSchemaInput
 
@@ -28,6 +26,20 @@ def _build_type_adapter(output_type: type[T]) -> TypeAdapter[T]:
 
     type_adapter = pydantic_module.TypeAdapter
     return cast("TypeAdapter[T]", type_adapter(type=output_type))
+
+
+def _replace_refs(schema: OutputSchemaInput) -> OutputSchemaInput:
+    try:
+        jsonref_module = importlib.import_module("jsonref")
+    except ModuleNotFoundError as error:
+        if error.name == "jsonref":
+            raise CodexStructuredResponseError(
+                "Structured output with `output_type` requires jsonref. "
+                'Install it with: pip install "acodex[structured-output]".',
+            ) from error
+        raise
+
+    return jsonref_module.replace_refs(schema, base_uri="", proxies=False)
 
 
 class OutputTypeAdapter(Generic[T]):
@@ -54,7 +66,7 @@ class OutputTypeAdapter(Generic[T]):
         schema = self._adapter.json_schema()
         self._ensure_additional_properties_is_false(schema)
 
-        return jsonref.replace_refs(schema, base_uri="", proxies=False)
+        return _replace_refs(schema)
 
     def validate_json(self, json_string: str | bytes | bytearray) -> T:
         if self._adapter is not None:
