@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import sys
 from pathlib import Path
 from typing import cast
 
@@ -24,6 +25,10 @@ from tests.unit.fake_codex_executable import create_fake_codex_executable
 
 NOT_CONSUMED_ERROR_MESSAGE = (
     "streamed.result is unavailable until streamed.events is fully consumed"
+)
+skip_output_type_tests_on_py315 = pytest.mark.skipif(
+    sys.version_info >= (3, 15),
+    reason="Pydantic is not available on Python 3.15+.",
 )
 
 
@@ -219,6 +224,7 @@ def test_async_thread_run_parses_json_when_only_output_schema_is_provided(tmp_pa
     assert payload == {"status": "ok", "count": 1}
 
 
+@skip_output_type_tests_on_py315
 def test_async_thread_run_validates_payload_when_output_type_is_provided(tmp_path: Path) -> None:
     thread = _build_thread(
         tmp_path,

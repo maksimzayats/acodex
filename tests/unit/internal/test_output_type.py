@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import sys
 
 import pytest
 from typing_extensions import TypedDict
@@ -16,6 +17,13 @@ class _TypedPayload(TypedDict):
     count: int
 
 
+skip_output_type_tests_on_py315 = pytest.mark.skipif(
+    sys.version_info >= (3, 15),
+    reason="Pydantic is not available on Python 3.15+.",
+)
+
+
+@skip_output_type_tests_on_py315
 def test_json_schema_prefers_explicit_output_schema_over_output_type() -> None:
     schema: OutputSchemaInput = {"type": "object", "properties": {"ok": {"type": "boolean"}}}
     adapter: OutputTypeAdapter[_TypedPayload] = OutputTypeAdapter(
@@ -26,6 +34,7 @@ def test_json_schema_prefers_explicit_output_schema_over_output_type() -> None:
     assert adapter.json_schema() == schema
 
 
+@skip_output_type_tests_on_py315
 def test_json_schema_from_output_type_sets_additional_properties_false() -> None:
     adapter: OutputTypeAdapter[_TypedPayload] = OutputTypeAdapter(output_type=_TypedPayload)
 
@@ -34,6 +43,7 @@ def test_json_schema_from_output_type_sets_additional_properties_false() -> None
     assert schema["additionalProperties"] is False
 
 
+@skip_output_type_tests_on_py315
 def test_validate_json_with_output_type_returns_validated_payload() -> None:
     adapter: OutputTypeAdapter[_TypedPayload] = OutputTypeAdapter(output_type=_TypedPayload)
 
@@ -42,6 +52,7 @@ def test_validate_json_with_output_type_returns_validated_payload() -> None:
     assert payload == {"name": "ok", "count": 1}
 
 
+@skip_output_type_tests_on_py315
 def test_validate_json_with_output_type_invalid_payload_raises_structured_error() -> None:
     adapter: OutputTypeAdapter[_TypedPayload] = OutputTypeAdapter(output_type=_TypedPayload)
 
