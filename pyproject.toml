@@ -25,6 +25,7 @@ dependencies = []
 pydantic = [
     # python 3.15+ currently has no compatible pydantic release
     "pydantic>=2 ; python_version < '3.15'",
+    "jsonref>=1",
 ]
 
 [project.urls]
@@ -41,6 +42,7 @@ dev = [
     "ruff>=0.14.13",
     "pydantic>=2 ; python_version < '3.15'",
     "jsonref>=1.1.0",
+    "pydantic>=2 ; python_version < '3.15'",
 ]
 docs = [
     "furo>=2025.12.19",
