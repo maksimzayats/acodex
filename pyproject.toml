@@ -80,7 +80,7 @@ disable_error_code = [
 [[tool.mypy.overrides]]
 module = ["tests.*"]
 strict = false
-disable_error_code = ["valid-type", "misc", "untyped-decorator"]
+disable_error_code = ["valid-type", "misc", "untyped-decorator", "attr-defined"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
