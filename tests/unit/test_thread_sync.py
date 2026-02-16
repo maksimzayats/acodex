@@ -2,12 +2,18 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 from typing import cast
 
 import pytest
+from typing_extensions import TypedDict
 
-from acodex.exceptions import CodexThreadRunError
+from acodex.exceptions import (
+    CodexStructuredResponseError,
+    CodexThreadRunError,
+    CodexThreadStreamNotConsumedError,
+)
 from acodex.exec import CodexExec
 from acodex.thread import Thread, _close_if_possible
 from acodex.types.events import ItemCompletedEvent, ThreadStartedEvent
@@ -15,6 +21,19 @@ from acodex.types.input import Input, UserInputLocalImage, UserInputText
 from acodex.types.items import AgentMessageItem
 from acodex.types.turn_options import OutputSchemaInput
 from tests.unit.fake_codex_executable import create_fake_codex_executable
+
+NOT_CONSUMED_ERROR_MESSAGE = (
+    "streamed.result is unavailable until streamed.events is fully consumed"
+)
+skip_output_type_tests_on_py315 = pytest.mark.skipif(
+    sys.version_info >= (3, 15),
+    reason="Pydantic is not available on Python 3.15+.",
+)
+
+
+class _StructuredPayload(TypedDict):
+    status: str
+    count: int
 
 
 def test_thread_run_streamed_yields_events_and_sets_thread_id(tmp_path: Path) -> None:
@@ -30,6 +49,112 @@ def test_thread_run_streamed_yields_events_and_sets_thread_id(tmp_path: Path) ->
     assert thread.id == "thread-123"
 
 
+def test_thread_run_streamed_result_raises_before_consumption_with_exact_message(
+    tmp_path: Path,
+) -> None:
+    thread = _build_thread(tmp_path, env={"FAKE_CODEX_MODE": "thread_success"})
+
+    streamed = thread.run_streamed("hello")
+
+    with pytest.raises(CodexThreadStreamNotConsumedError) as error:
+        _ = streamed.result
+    assert str(error.value) == NOT_CONSUMED_ERROR_MESSAGE
+
+    _close_if_possible(streamed.events)
+
+
+def test_thread_run_streamed_result_raises_after_partial_consumption(tmp_path: Path) -> None:
+    thread = _build_thread(tmp_path, env={"FAKE_CODEX_MODE": "thread_success"})
+
+    streamed = thread.run_streamed("hello")
+    _ = next(streamed.events)
+
+    with pytest.raises(CodexThreadStreamNotConsumedError) as error:
+        _ = streamed.result
+    assert str(error.value) == NOT_CONSUMED_ERROR_MESSAGE
+
+    _close_if_possible(streamed.events)
+
+
+def test_thread_run_streamed_result_raises_after_manual_close_before_exhaustion(
+    tmp_path: Path,
+) -> None:
+    thread = _build_thread(tmp_path, env={"FAKE_CODEX_MODE": "thread_success"})
+
+    streamed = thread.run_streamed("hello")
+    events = streamed.events
+    _ = next(events)
+    close_method = getattr(events, "close", None)
+    assert close_method is not None
+    close_method()
+
+    with pytest.raises(CodexThreadStreamNotConsumedError) as error:
+        _ = streamed.result
+    assert str(error.value) == NOT_CONSUMED_ERROR_MESSAGE
+
+
+def test_thread_run_streamed_result_returns_complete_turn_after_full_exhaustion(
+    tmp_path: Path,
+) -> None:
+    thread = _build_thread(
+        tmp_path,
+        env={
+            "FAKE_CODEX_MODE": "thread_success",
+            "FAKE_RESPONSES_JSON": json.dumps(["draft", "final answer"]),
+        },
+    )
+
+    streamed = thread.run_streamed("hello")
+    _ = list(streamed.events)
+    turn = streamed.result
+
+    assert len(turn.items) == 2
+    assert turn.final_response == "final answer"
+    assert turn.usage is not None
+    assert turn.usage.input_tokens == 10
+    assert turn.usage.cached_input_tokens == 2
+    assert turn.usage.output_tokens == 5
+    message_texts = [item.text for item in turn.items if isinstance(item, AgentMessageItem)]
+    assert len(message_texts) == len(turn.items)
+    assert message_texts == ["draft", "final answer"]
+
+
+def test_thread_run_streamed_result_is_stable_after_full_exhaustion(tmp_path: Path) -> None:
+    thread = _build_thread(
+        tmp_path,
+        env={
+            "FAKE_CODEX_MODE": "thread_success",
+            "FAKE_RESPONSES_JSON": json.dumps(["draft", "final answer"]),
+        },
+    )
+
+    streamed = thread.run_streamed("hello")
+    _ = list(streamed.events)
+
+    first = streamed.result
+    second = streamed.result
+
+    assert first.final_response == second.final_response
+    assert len(first.items) == len(second.items)
+    assert first.usage == second.usage
+
+
+def test_thread_run_streamed_result_raises_after_failed_turn_when_fully_exhausted(
+    tmp_path: Path,
+) -> None:
+    message = "streamed sync failure"
+    thread = _build_thread(
+        tmp_path,
+        env={"FAKE_CODEX_MODE": "thread_failed", "FAKE_FAILURE_MESSAGE": message},
+    )
+
+    streamed = thread.run_streamed("hello")
+    _ = list(streamed.events)
+
+    with pytest.raises(CodexThreadRunError, match=re.escape(message)):
+        _ = streamed.result
+
+
 def test_thread_run_returns_completed_turn_with_final_response_and_usage(tmp_path: Path) -> None:
     thread = _build_thread(
         tmp_path,
@@ -43,10 +168,89 @@ def test_thread_run_returns_completed_turn_with_final_response_and_usage(tmp_pat
 
     assert len(turn.items) == 2
     assert turn.final_response == "final answer"
+    assert turn.structured_response == turn.final_response
     assert turn.usage is not None
     assert turn.usage.input_tokens == 10
     assert turn.usage.cached_input_tokens == 2
     assert turn.usage.output_tokens == 5
+
+
+def test_thread_run_parses_json_when_only_output_schema_is_provided(tmp_path: Path) -> None:
+    thread = _build_thread(
+        tmp_path,
+        env={
+            "FAKE_CODEX_MODE": "thread_success",
+            "FAKE_RESPONSES_JSON": json.dumps(['{"status":"ok","count":1}']),
+        },
+    )
+
+    turn = thread.run("hello", output_schema={"type": "object"})
+
+    assert turn.structured_response == {"status": "ok", "count": 1}
+
+
+@skip_output_type_tests_on_py315
+def test_thread_run_validates_payload_when_output_type_is_provided(tmp_path: Path) -> None:
+    thread = _build_thread(
+        tmp_path,
+        env={
+            "FAKE_CODEX_MODE": "thread_success",
+            "FAKE_RESPONSES_JSON": json.dumps(['{"status":"ok","count":1}']),
+        },
+    )
+
+    turn = thread.run("hello", output_type=_StructuredPayload)
+
+    assert turn.structured_response == {"status": "ok", "count": 1}
+
+
+def test_thread_run_raises_on_invalid_output_type_payload(tmp_path: Path) -> None:
+    thread = _build_thread(
+        tmp_path,
+        env={
+            "FAKE_CODEX_MODE": "thread_success",
+            "FAKE_RESPONSES_JSON": json.dumps(['{"status":"ok","count":"bad"}']),
+        },
+    )
+
+    with pytest.raises(CodexStructuredResponseError):
+        thread.run("hello", output_type=_StructuredPayload)
+
+
+def test_thread_run_raises_on_invalid_json_with_output_schema_only(tmp_path: Path) -> None:
+    thread = _build_thread(
+        tmp_path,
+        env={
+            "FAKE_CODEX_MODE": "thread_success",
+            "FAKE_RESPONSES_JSON": json.dumps(["plain text"]),
+        },
+    )
+
+    with pytest.raises(CodexStructuredResponseError):
+        thread.run("hello", output_schema={"type": "object"})
+
+
+def test_thread_run_drains_events_after_turn_failed(tmp_path: Path) -> None:
+    message = "CLI failure message"
+    thread = _build_thread(
+        tmp_path,
+        env={
+            "FAKE_CODEX_MODE": "lines",
+            "FAKE_LINES_JSON": json.dumps(
+                [
+                    json.dumps({"type": "thread.started", "thread_id": "thread-before-fail"}),
+                    json.dumps({"type": "turn.started"}),
+                    json.dumps({"type": "turn.failed", "error": {"message": message}}),
+                    json.dumps({"type": "thread.started", "thread_id": "thread-after-fail"}),
+                ],
+            ),
+        },
+    )
+
+    with pytest.raises(CodexThreadRunError, match=re.escape(message)):
+        thread.run("hello")
+
+    assert thread.id == "thread-after-fail"
 
 
 def test_thread_run_raises_codex_thread_run_error_on_turn_failed(tmp_path: Path) -> None:

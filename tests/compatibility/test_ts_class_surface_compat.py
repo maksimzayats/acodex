@@ -63,10 +63,22 @@ def test_thread_class_surface_supports_typescript_members() -> None:
         expected_name="run_streamed",
         arg_name="input",
     )
+    _assert_optional_parameter(Thread.run, expected_name="run", arg_name="output_type")
+    _assert_optional_parameter(
+        Thread.run_streamed,
+        expected_name="run_streamed",
+        arg_name="output_type",
+    )
 
     assert inspect.iscoroutinefunction(AsyncThread.run), "AsyncThread.run must be async"
     assert inspect.iscoroutinefunction(AsyncThread.run_streamed), (
         "AsyncThread.run_streamed must be async"
+    )
+    _assert_optional_parameter(AsyncThread.run, expected_name="run", arg_name="output_type")
+    _assert_optional_parameter(
+        AsyncThread.run_streamed,
+        expected_name="run_streamed",
+        arg_name="output_type",
     )
 
 
@@ -101,6 +113,25 @@ def _assert_one_required_positional(
     assert not remaining_required, (
         f"{expected_name} must not require args beyond {arg_name!r}: {remaining_required!r}"
     )
+
+
+def _assert_optional_parameter(
+    func: Callable[..., object],
+    *,
+    expected_name: str,
+    arg_name: str,
+) -> None:
+    signature = inspect.signature(func)
+    params = list(signature.parameters.values())[1:]
+    param = next((current for current in params if current.name == arg_name), None)
+    assert param is not None, f"{expected_name} must define optional {arg_name!r}"
+    assert param.kind in {
+        inspect.Parameter.POSITIONAL_ONLY,
+        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        inspect.Parameter.KEYWORD_ONLY,
+    }, f"{expected_name}.{arg_name} must be a standard parameter"
+    assert not _is_required(param), f"{expected_name}.{arg_name} must be optional"
+    assert param.default is None, f"{expected_name}.{arg_name} default must be None"
 
 
 def _is_required(param: inspect.Parameter) -> bool:

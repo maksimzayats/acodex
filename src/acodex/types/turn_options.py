@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, TypeAlias, TypedDict
 if TYPE_CHECKING:
     from typing_extensions import NotRequired
 
+
 JsonObject: TypeAlias = dict[str, "JsonValue"]
 JsonValue: TypeAlias = str | int | float | bool | list["JsonValue"] | JsonObject | None
 TurnSignal: TypeAlias = threading.Event | asyncio.Event

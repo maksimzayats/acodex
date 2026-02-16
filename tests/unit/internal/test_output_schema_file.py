@@ -26,7 +26,13 @@ def test_unset_schema_returns_noop() -> None:
     schema_file.cleanup()
 
 
-@pytest.mark.parametrize("invalid", [None, [], "x", 1])
+def test_none_schema_returns_noop() -> None:
+    schema_file = output_schema_file.create_output_schema_file(None)
+    assert schema_file.schema_path is None
+    schema_file.cleanup()
+
+
+@pytest.mark.parametrize("invalid", [[], "x", 1])
 def test_rejects_non_object_schema(invalid: Any) -> None:
     with pytest.raises(CodexOutputSchemaError, match="output_schema must be a plain JSON object"):
         output_schema_file.create_output_schema_file(invalid)

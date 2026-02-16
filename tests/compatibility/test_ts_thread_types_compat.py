@@ -21,8 +21,13 @@ def test_turn_alias_matches_python_dataclass() -> None:
     assert is_dataclass(py_symbol), "acodex.types.turn.Turn must be a dataclass"
 
     py_fields = {field_info.name: field_info for field_info in fields(py_symbol)}
-    assert set(ts_props) == set(py_fields), (
-        f"Turn fields mismatch: TS={sorted(ts_props)}, Python={sorted(py_fields)}"
+    assert set(ts_props) <= set(py_fields), (
+        f"Python Turn must include TS Turn fields: TS={sorted(ts_props)}, Python={sorted(py_fields)}"
+    )
+
+    python_only_fields = set(py_fields) - set(ts_props)
+    assert python_only_fields == {"structured_response"}, (
+        f"Unexpected Python-only Turn fields: {sorted(python_only_fields)}"
     )
 
     py_hints = get_type_hints(py_symbol, include_extras=True)

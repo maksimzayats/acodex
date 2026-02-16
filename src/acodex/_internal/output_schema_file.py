@@ -7,17 +7,10 @@ import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, TypeGuard
+from typing import TypeGuard
 
 from acodex.exceptions import CodexOutputSchemaError
 from acodex.types.turn_options import OutputSchemaInput
-
-
-class _Unset:
-    __slots__ = ()
-
-
-UNSET: Final[_Unset] = _Unset()
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,8 +19,8 @@ class OutputSchemaFile:
     cleanup: Callable[[], None]
 
 
-def create_output_schema_file(schema: OutputSchemaInput | _Unset = UNSET) -> OutputSchemaFile:
-    if schema is UNSET:
+def create_output_schema_file(schema: OutputSchemaInput | None = None) -> OutputSchemaFile:
+    if schema is None:
         return OutputSchemaFile(schema_path=None, cleanup=_noop)
 
     raw_schema: object = schema

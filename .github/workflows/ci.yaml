@@ -45,7 +45,12 @@ jobs:
         run: uv run mypy .
 
       - name: Run tests with coverage
+        if: ${{ !startsWith(matrix.python-version, '3.15') }}
         run: uv run pytest tests/ --cov=src/acodex --cov-report=xml --cov-report=term-missing
+
+      - name: Run tests (no coverage gate on Python 3.15)
+        if: ${{ startsWith(matrix.python-version, '3.15') }}
+        run: uv run pytest tests/ --cov=src/acodex --cov-report=xml --cov-report=term-missing --cov-fail-under=0
 
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.14'

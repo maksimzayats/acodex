@@ -1,30 +1,32 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
-from typing import cast
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from typing_extensions import Unpack
 
 from acodex._internal.exec import build_exec_args
-from acodex._internal.output_schema_file import UNSET, create_output_schema_file
+from acodex._internal.output_schema_file import create_output_schema_file
+from acodex._internal.output_type import OutputTypeAdapter
 from acodex._internal.thread_core import (
     build_turn_or_raise,
     initial_turn_state,
     parse_thread_event_jsonl,
     reduce_turn_state,
 )
+from acodex.exceptions import CodexThreadStreamNotConsumedError
 from acodex.exec import AsyncCodexExec, CodexExec
 from acodex.types.codex_options import CodexOptions
 from acodex.types.events import ThreadEvent, ThreadStartedEvent
 from acodex.types.input import Input
 from acodex.types.thread_options import ThreadOptions
-from acodex.types.turn import (
-    AsyncRunStreamedResult,
-    RunResult,
-    RunStreamedResult,
-    StreamedTurn,
-)
+from acodex.types.turn import AsyncRunStreamedResult, RunResult, RunStreamedResult
 from acodex.types.turn_options import TurnOptions
+
+if TYPE_CHECKING:
+    T = TypeVar("T", default=Any)
+else:
+    T = TypeVar("T")
 
 
 class Thread:
@@ -57,8 +59,9 @@ class Thread:
     def run_streamed(
         self,
         input: Input,  # noqa: A002
+        output_type: type[T] | None = None,
         **turn_options: Unpack[TurnOptions],
-    ) -> RunStreamedResult:
+    ) -> RunStreamedResult[T]:
         """Provide input to the agent and stream turn events as they are produced.
 
         Set `turn_options["signal"]` via `event.set()` to request cancellation.
@@ -68,9 +71,24 @@ class Thread:
             A streamed turn result with an iterator of parsed events.
 
         """
+        state = initial_turn_state()
+        stream_completed = False
+
+        output_type_adapter = OutputTypeAdapter(
+            output_type=output_type,
+            output_schema=turn_options.get("output_schema"),
+        )
+
+        def build_result() -> RunResult[T]:
+            if not stream_completed:
+                raise CodexThreadStreamNotConsumedError(
+                    "streamed.result is unavailable until streamed.events is fully consumed",
+                )
+            return build_turn_or_raise(state, output_type_adapter=output_type_adapter)
 
         def event_generator() -> Iterator[ThreadEvent]:
-            schema_file = create_output_schema_file(turn_options.get("output_schema", UNSET))
+            nonlocal state, stream_completed
+            schema_file = create_output_schema_file(schema=output_type_adapter.json_schema())
             line_stream: Iterator[str] | None = None
             try:
                 exec_args = build_exec_args(
@@ -91,19 +109,22 @@ class Thread:
                     if isinstance(event, ThreadStartedEvent):
                         self._id = event.thread_id
 
+                    state = reduce_turn_state(state, event)
                     yield event
+                stream_completed = True
             finally:
                 if line_stream is not None:
                     _close_if_possible(line_stream)
                 schema_file.cleanup()
 
-        return StreamedTurn(events=event_generator())
+        return RunStreamedResult(events=event_generator(), result_factory=build_result)
 
     def run(
         self,
         input: Input,  # noqa: A002
+        output_type: type[T] | None = None,
         **turn_options: Unpack[TurnOptions],
-    ) -> RunResult:
+    ) -> RunResult[T]:
         """Provide input to the agent and return the completed turn.
 
         Set `turn_options["signal"]` via `event.set()` to request cancellation.
@@ -113,17 +134,15 @@ class Thread:
             The completed turn with reduced items, final response, and usage.
 
         """
-        events = self.run_streamed(input, **turn_options).events
-        state = initial_turn_state()
+        streamed = self.run_streamed(input, output_type=output_type, **turn_options)
+        events = streamed.events
         try:
-            for event in events:
-                state = reduce_turn_state(state, event)
-                if state.failure_message is not None:
-                    break
+            for _event in events:
+                pass
         finally:
             _close_if_possible(events)
 
-        return build_turn_or_raise(state)
+        return streamed.result
 
 
 class AsyncThread:
@@ -156,8 +175,9 @@ class AsyncThread:
     async def run_streamed(
         self,
         input: Input,  # noqa: A002
+        output_type: type[T] | None = None,
         **turn_options: Unpack[TurnOptions],
-    ) -> AsyncRunStreamedResult:
+    ) -> AsyncRunStreamedResult[T]:
         """Provide input to the agent and stream turn events as they are produced.
 
         Set `turn_options["signal"]` via `event.set()` to request cancellation.
@@ -167,9 +187,24 @@ class AsyncThread:
             A streamed turn result with an async iterator of parsed events.
 
         """
+        state = initial_turn_state()
+        stream_completed = False
+
+        output_type_adapter = OutputTypeAdapter(
+            output_type=output_type,
+            output_schema=turn_options.get("output_schema"),
+        )
+
+        def build_result() -> RunResult[T]:
+            if not stream_completed:
+                raise CodexThreadStreamNotConsumedError(
+                    "streamed.result is unavailable until streamed.events is fully consumed",
+                )
+            return build_turn_or_raise(state, output_type_adapter=output_type_adapter)
 
         async def event_generator() -> AsyncIterator[ThreadEvent]:
-            schema_file = create_output_schema_file(turn_options.get("output_schema", UNSET))
+            nonlocal state, stream_completed
+            schema_file = create_output_schema_file(schema=output_type_adapter.json_schema())
             line_stream: AsyncIterator[str] | None = None
             try:
                 exec_args = build_exec_args(
@@ -190,19 +225,22 @@ class AsyncThread:
                     if isinstance(event, ThreadStartedEvent):
                         self._id = event.thread_id
 
+                    state = reduce_turn_state(state, event)
                     yield event
+                stream_completed = True
             finally:
                 if line_stream is not None:
                     await _aclose_if_possible(line_stream)
                 schema_file.cleanup()
 
-        return StreamedTurn(events=event_generator())
+        return AsyncRunStreamedResult(events=event_generator(), result_factory=build_result)
 
     async def run(
         self,
         input: Input,  # noqa: A002
+        output_type: type[T] | None = None,
         **turn_options: Unpack[TurnOptions],
-    ) -> RunResult:
+    ) -> RunResult[T]:
         """Provide input to the agent and return the completed turn.
 
         Set `turn_options["signal"]` via `event.set()` to request cancellation.
@@ -212,17 +250,15 @@ class AsyncThread:
             The completed turn with reduced items, final response, and usage.
 
         """
-        events = (await self.run_streamed(input, **turn_options)).events
-        state = initial_turn_state()
+        streamed = await self.run_streamed(input, output_type=output_type, **turn_options)
+        events = streamed.events
         try:
-            async for event in events:
-                state = reduce_turn_state(state, event)
-                if state.failure_message is not None:
-                    break
+            async for _event in events:
+                pass
         finally:
             await _aclose_if_possible(events)
 
-        return build_turn_or_raise(state)
+        return streamed.result
 
 
 def _close_if_possible(iterator: object) -> None:
