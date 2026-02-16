@@ -5,10 +5,6 @@ acodex is a typed Python SDK for the Codex CLI: run agent threads from Python (s
 stream JSONL events as parsed dataclasses, request structured JSON output, and attach images as
 inputs.
 
-.. important::
-
-   acodex is a community-maintained wrapper around the Codex CLI and is not affiliated with OpenAI.
-
 Key features
 ------------
 
@@ -48,6 +44,13 @@ Install (uv):
    print(turn.final_response)
 
 Next: :doc:`getting-started/quickstart` (structured output) and :doc:`guides/streaming` (events).
+
+Disclaimer
+----------
+
+.. important::
+
+   |acodex_affiliation_disclaimer|
 
 .. toctree::
    :maxdepth: 2

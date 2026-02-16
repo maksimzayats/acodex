@@ -12,7 +12,7 @@ When to use this page
 
 .. important::
 
-   acodex is a community wrapper around the Codex CLI and is not affiliated with OpenAI.
+   |acodex_affiliation_disclaimer|
 
 Prerequisite: Codex CLI
 -----------------------

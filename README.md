@@ -1,8 +1,7 @@
 # acodex
 
-A typed Python SDK for the Codex CLI (sync + async, streaming events, structured output, images).
-
-acodex is a community-maintained wrapper around the Codex CLI and is not affiliated with OpenAI.
+acodex is a fast, typed Python SDK for Codex CLI workflows (sync/async, streaming, structured output,
+images, safety controls), and API parity with the TypeScript SDK.
 
 [![PyPI version](https://img.shields.io/pypi/v/acodex.svg)](https://pypi.org/project/acodex/)
 [![Python versions](https://img.shields.io/pypi/pyversions/acodex.svg)](https://pypi.org/project/acodex/)
@@ -152,6 +151,10 @@ An hourly workflow checks for new stable Codex releases and opens a PR to bump t
 - Docs: https://docs.acodex.dev
 - GitHub: https://github.com/maksimzayats/acodex
 - Issues: https://github.com/maksimzayats/acodex/issues
+
+## Disclaimer
+
+It is independently maintained and is not affiliated with, sponsored by, or endorsed by OpenAI.
 
 ## License
 

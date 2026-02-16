@@ -112,6 +112,7 @@ rst_prolog = """
 .. |project_repo| replace:: `GitHub <https://github.com/maksimzayats/acodex>`__
 .. |project_issues| replace:: `Issues <https://github.com/maksimzayats/acodex/issues>`__
 .. |project_docs| replace:: `docs.acodex.dev <https://docs.acodex.dev>`__
+.. |acodex_affiliation_disclaimer| replace:: acodex is an independently maintained SDK for the Codex CLI and is not affiliated with, sponsored by, or endorsed by OpenAI.
 """
 
 intersphinx_mapping = {
