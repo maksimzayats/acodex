@@ -87,7 +87,12 @@ for event in streamed.events:
         print("usage", event.usage)
     elif event.type == "turn.failed":
         print("error", event.error.message)
+
+turn = streamed.result
+print(turn.final_response)
 ```
+
+`streamed.result` is available only after `streamed.events` is fully consumed.
 
 ## Structured output (JSON schema)
 

@@ -206,3 +206,20 @@ Compatibility assertion:
 
 - Test: `tests/compatibility/test_ts_turn_options_compat.py` (accepts TS `unknown` as compatible with
   narrower Python typing)
+
+## 9) Streamed result exposes a completed turn property in Python
+
+- TypeScript streamed flow returns events and leaves reduction to SDK internals in `run()`.
+- Python streamed result models expose `streamed.result` (sync and async) after the stream is fully
+  consumed.
+
+References:
+
+- Python models: `src/acodex/types/turn.py`
+- Python run flow: `src/acodex/thread.py`
+
+Usage implication:
+
+- Consume `streamed.events` completely, then access `streamed.result`.
+- Accessing `streamed.result` before full consumption raises
+  `CodexThreadStreamNotConsumedError`.

@@ -7,7 +7,7 @@ from typing import cast
 
 import pytest
 
-from acodex.exceptions import CodexThreadRunError
+from acodex.exceptions import CodexThreadRunError, CodexThreadStreamNotConsumedError
 from acodex.exec import CodexExec
 from acodex.thread import Thread, _close_if_possible
 from acodex.types.events import ItemCompletedEvent, ThreadStartedEvent
@@ -30,6 +30,38 @@ def test_thread_run_streamed_yields_events_and_sets_thread_id(tmp_path: Path) ->
     assert thread.id == "thread-123"
 
 
+def test_thread_run_streamed_result_raises_before_stream_is_consumed(tmp_path: Path) -> None:
+    thread = _build_thread(tmp_path, env={"FAKE_CODEX_MODE": "thread_success"})
+
+    streamed = thread.run_streamed("hello")
+
+    with pytest.raises(CodexThreadStreamNotConsumedError, match="fully consumed"):
+        _ = streamed.result
+
+    _close_if_possible(streamed.events)
+
+
+def test_thread_run_streamed_result_returns_turn_after_stream_exhaustion(tmp_path: Path) -> None:
+    thread = _build_thread(
+        tmp_path,
+        env={
+            "FAKE_CODEX_MODE": "thread_success",
+            "FAKE_RESPONSES_JSON": json.dumps(["draft", "final answer"]),
+        },
+    )
+
+    streamed = thread.run_streamed("hello")
+    _ = list(streamed.events)
+    turn = streamed.result
+
+    assert len(turn.items) == 2
+    assert turn.final_response == "final answer"
+    assert turn.usage is not None
+    assert turn.usage.input_tokens == 10
+    assert turn.usage.cached_input_tokens == 2
+    assert turn.usage.output_tokens == 5
+
+
 def test_thread_run_returns_completed_turn_with_final_response_and_usage(tmp_path: Path) -> None:
     thread = _build_thread(
         tmp_path,
@@ -47,6 +79,29 @@ def test_thread_run_returns_completed_turn_with_final_response_and_usage(tmp_pat
     assert turn.usage.input_tokens == 10
     assert turn.usage.cached_input_tokens == 2
     assert turn.usage.output_tokens == 5
+
+
+def test_thread_run_drains_events_after_turn_failed(tmp_path: Path) -> None:
+    message = "CLI failure message"
+    thread = _build_thread(
+        tmp_path,
+        env={
+            "FAKE_CODEX_MODE": "lines",
+            "FAKE_LINES_JSON": json.dumps(
+                [
+                    json.dumps({"type": "thread.started", "thread_id": "thread-before-fail"}),
+                    json.dumps({"type": "turn.started"}),
+                    json.dumps({"type": "turn.failed", "error": {"message": message}}),
+                    json.dumps({"type": "thread.started", "thread_id": "thread-after-fail"}),
+                ],
+            ),
+        },
+    )
+
+    with pytest.raises(CodexThreadRunError, match=re.escape(message)):
+        thread.run("hello")
+
+    assert thread.id == "thread-after-fail"
 
 
 def test_thread_run_raises_codex_thread_run_error_on_turn_failed(tmp_path: Path) -> None:

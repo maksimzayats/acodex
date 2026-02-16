@@ -13,6 +13,7 @@ from acodex._internal.thread_core import (
     parse_thread_event_jsonl,
     reduce_turn_state,
 )
+from acodex.exceptions import CodexThreadStreamNotConsumedError
 from acodex.exec import AsyncCodexExec, CodexExec
 from acodex.types.codex_options import CodexOptions
 from acodex.types.events import ThreadEvent, ThreadStartedEvent
@@ -22,7 +23,6 @@ from acodex.types.turn import (
     AsyncRunStreamedResult,
     RunResult,
     RunStreamedResult,
-    StreamedTurn,
 )
 from acodex.types.turn_options import TurnOptions
 
@@ -68,8 +68,18 @@ class Thread:
             A streamed turn result with an iterator of parsed events.
 
         """
+        state = initial_turn_state()
+        stream_completed = False
+
+        def build_result() -> RunResult:
+            if not stream_completed:
+                raise CodexThreadStreamNotConsumedError(
+                    "streamed.result is unavailable until streamed.events is fully consumed",
+                )
+            return build_turn_or_raise(state)
 
         def event_generator() -> Iterator[ThreadEvent]:
+            nonlocal state, stream_completed
             schema_file = create_output_schema_file(turn_options.get("output_schema", UNSET))
             line_stream: Iterator[str] | None = None
             try:
@@ -91,13 +101,15 @@ class Thread:
                     if isinstance(event, ThreadStartedEvent):
                         self._id = event.thread_id
 
+                    state = reduce_turn_state(state, event)
                     yield event
+                stream_completed = True
             finally:
                 if line_stream is not None:
                     _close_if_possible(line_stream)
                 schema_file.cleanup()
 
-        return StreamedTurn(events=event_generator())
+        return RunStreamedResult(events=event_generator(), result_factory=build_result)
 
     def run(
         self,
@@ -113,17 +125,15 @@ class Thread:
             The completed turn with reduced items, final response, and usage.
 
         """
-        events = self.run_streamed(input, **turn_options).events
-        state = initial_turn_state()
+        streamed = self.run_streamed(input, **turn_options)
+        events = streamed.events
         try:
-            for event in events:
-                state = reduce_turn_state(state, event)
-                if state.failure_message is not None:
-                    break
+            for _event in events:
+                pass
         finally:
             _close_if_possible(events)
 
-        return build_turn_or_raise(state)
+        return streamed.result
 
 
 class AsyncThread:
@@ -167,8 +177,18 @@ class AsyncThread:
             A streamed turn result with an async iterator of parsed events.
 
         """
+        state = initial_turn_state()
+        stream_completed = False
+
+        def build_result() -> RunResult:
+            if not stream_completed:
+                raise CodexThreadStreamNotConsumedError(
+                    "streamed.result is unavailable until streamed.events is fully consumed",
+                )
+            return build_turn_or_raise(state)
 
         async def event_generator() -> AsyncIterator[ThreadEvent]:
+            nonlocal state, stream_completed
             schema_file = create_output_schema_file(turn_options.get("output_schema", UNSET))
             line_stream: AsyncIterator[str] | None = None
             try:
@@ -190,13 +210,15 @@ class AsyncThread:
                     if isinstance(event, ThreadStartedEvent):
                         self._id = event.thread_id
 
+                    state = reduce_turn_state(state, event)
                     yield event
+                stream_completed = True
             finally:
                 if line_stream is not None:
                     await _aclose_if_possible(line_stream)
                 schema_file.cleanup()
 
-        return StreamedTurn(events=event_generator())
+        return AsyncRunStreamedResult(events=event_generator(), result_factory=build_result)
 
     async def run(
         self,
@@ -212,17 +234,15 @@ class AsyncThread:
             The completed turn with reduced items, final response, and usage.
 
         """
-        events = (await self.run_streamed(input, **turn_options)).events
-        state = initial_turn_state()
+        streamed = await self.run_streamed(input, **turn_options)
+        events = streamed.events
         try:
-            async for event in events:
-                state = reduce_turn_state(state, event)
-                if state.failure_message is not None:
-                    break
+            async for _event in events:
+                pass
         finally:
             await _aclose_if_possible(events)
 
-        return build_turn_or_raise(state)
+        return streamed.result
 
 
 def _close_if_possible(iterator: object) -> None:

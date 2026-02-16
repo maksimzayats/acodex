@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterator
-from dataclasses import dataclass
+from collections.abc import AsyncIterator, Callable, Iterator
+from dataclasses import dataclass, field
 from typing import Generic, TypeAlias, TypeVar
 
 from acodex.types.events import ThreadEvent, Usage
@@ -31,5 +31,26 @@ class StreamedTurn(Generic[EventsT]):
 
 RunResult: TypeAlias = Turn
 
-RunStreamedResult: TypeAlias = StreamedTurn[Iterator[ThreadEvent]]
-AsyncRunStreamedResult: TypeAlias = StreamedTurn[AsyncIterator[ThreadEvent]]
+
+@dataclass(frozen=True, slots=True)
+class RunStreamedResult(StreamedTurn[Iterator[ThreadEvent]]):
+    """The synchronous result of `run_streamed`."""
+
+    result_factory: Callable[[], RunResult] = field(repr=False, compare=False)
+
+    @property
+    def result(self) -> RunResult:
+        """Return the reduced turn after full stream exhaustion."""
+        return self.result_factory()
+
+
+@dataclass(frozen=True, slots=True)
+class AsyncRunStreamedResult(StreamedTurn[AsyncIterator[ThreadEvent]]):
+    """The asynchronous result of `run_streamed`."""
+
+    result_factory: Callable[[], RunResult] = field(repr=False, compare=False)
+
+    @property
+    def result(self) -> RunResult:
+        """Return the reduced turn after full stream exhaustion."""
+        return self.result_factory()
