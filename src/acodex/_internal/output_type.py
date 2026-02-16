@@ -4,6 +4,8 @@ import importlib
 import json
 from typing import TYPE_CHECKING, Generic, TypeVar, cast
 
+import jsonref
+
 from acodex.exceptions import CodexStructuredResponseError
 from acodex.types.turn_options import OutputSchemaInput
 
@@ -50,9 +52,9 @@ class OutputTypeAdapter(Generic[T]):
             return None
 
         schema = self._adapter.json_schema()
-        schema.setdefault("additionalProperties", False)
+        self._ensure_additional_properties_is_false(schema)
 
-        return schema
+        return jsonref.replace_refs(schema, base_uri="", proxies=False)
 
     def validate_json(self, json_string: str | bytes | bytearray) -> T:
         if self._adapter is not None:
@@ -75,3 +77,16 @@ class OutputTypeAdapter(Generic[T]):
             "No output schema available for validating structured response. "
             "Provide an `output_type` or `output_schema` to enable validation.",
         )
+
+    def _ensure_additional_properties_is_false(self, schema: OutputSchemaInput) -> None:
+        """Recursively set `additionalProperties` to `False` in the provided JSON schema and all nested subschemas."""
+        if schema.get("type") == "object":
+            schema["additionalProperties"] = False
+
+        for value in schema.values():
+            if isinstance(value, dict):
+                self._ensure_additional_properties_is_false(value)
+            elif isinstance(value, list):
+                for item in value:
+                    if isinstance(item, dict):
+                        self._ensure_additional_properties_is_false(item)

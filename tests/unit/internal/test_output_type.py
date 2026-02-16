@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 import sys
 
 import pytest
@@ -15,6 +16,16 @@ from acodex.types.turn_options import OutputSchemaInput
 class _TypedPayload(TypedDict):
     name: str
     count: int
+
+
+class _TypedComment(TypedDict):
+    id: int
+    severity: int
+    comment: str
+
+
+class _TypedCheckResult(TypedDict):
+    comments: list[_TypedComment]
 
 
 skip_output_type_tests_on_py315 = pytest.mark.skipif(
@@ -41,6 +52,16 @@ def test_json_schema_from_output_type_sets_additional_properties_false() -> None
     schema = adapter.json_schema()
     assert schema is not None
     assert schema["additionalProperties"] is False
+
+
+@skip_output_type_tests_on_py315
+def test_json_schema_from_nested_output_type_is_json_serializable() -> None:
+    adapter: OutputTypeAdapter[_TypedCheckResult] = OutputTypeAdapter(
+        output_type=_TypedCheckResult,
+    )
+    schema = adapter.json_schema()
+    assert schema is not None
+    assert isinstance(json.dumps(schema), str)
 
 
 @skip_output_type_tests_on_py315
