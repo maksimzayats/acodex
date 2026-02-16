@@ -338,7 +338,20 @@ def _assert_python_expected_compatible(
     actual: object,
     *,
     resolver: Callable[[str], object | None],
+    seen: set[tuple[str, str]] | None = None,
 ) -> None:
+    if seen is None:
+        seen = set()
+
+    expected = _resolve_python_forward_annotation(expected, resolver=resolver)
+    actual = _resolve_python_forward_annotation(actual, resolver=resolver)
+
+    seen_key = (repr(expected), repr(actual))
+    if seen_key in seen:
+        return
+    next_seen = set(seen)
+    next_seen.add(seen_key)
+
     if expected is object:
         return
 
@@ -349,33 +362,30 @@ def _assert_python_expected_compatible(
     actual_origin = get_origin(actual)
 
     if _is_python_union(expected):
-        expected_members = _python_union_members(expected)
-        actual_members = _python_union_members(actual)
-        if expected_members is None or actual_members is None:
-            msg = f"Expected Python union for both types, got: {expected!r} and {actual!r}"
-            raise AssertionError(msg)
-        if set(expected_members) != set(actual_members):
-            msg = f"Union mismatch: expected={expected!r} actual={actual!r}"
-            raise AssertionError(msg)
+        _assert_python_union_expected_compatible(
+            expected,
+            actual,
+            resolver=resolver,
+            seen=next_seen,
+        )
         return
 
     if expected_origin is list and actual_origin is list:
-        expected_args = get_args(expected)
-        actual_args = get_args(actual)
-        if len(expected_args) != 1 or len(actual_args) != 1:
-            msg = f"Unsupported list args: expected={expected!r} actual={actual!r}"
-            raise AssertionError(msg)
-        _assert_python_expected_compatible(expected_args[0], actual_args[0], resolver=resolver)
+        _assert_python_list_expected_compatible(
+            expected,
+            actual,
+            resolver=resolver,
+            seen=next_seen,
+        )
         return
 
     if expected_origin is dict and actual_origin is dict:
-        expected_args = get_args(expected)
-        actual_args = get_args(actual)
-        if len(expected_args) != 2 or len(actual_args) != 2:
-            msg = f"Unsupported dict args: expected={expected!r} actual={actual!r}"
-            raise AssertionError(msg)
-        _assert_python_expected_compatible(expected_args[0], actual_args[0], resolver=resolver)
-        _assert_python_expected_compatible(expected_args[1], actual_args[1], resolver=resolver)
+        _assert_python_dict_expected_compatible(
+            expected,
+            actual,
+            resolver=resolver,
+            seen=next_seen,
+        )
         return
 
     msg = f"Type mismatch: expected={expected!r} actual={actual!r}"
@@ -414,3 +424,132 @@ def _is_python_literal_string(annotation: object) -> bool:
         return False
     args = get_args(annotation)
     return len(args) == 1 and isinstance(args[0], str)
+
+
+def _python_expected_member_matches_actual(
+    expected_member: object,
+    actual_member: object,
+    *,
+    resolver: Callable[[str], object | None],
+    seen: set[tuple[str, str]],
+) -> bool:
+    try:
+        _assert_python_expected_compatible(
+            expected_member,
+            actual_member,
+            resolver=resolver,
+            seen=seen,
+        )
+    except AssertionError:
+        return False
+    return True
+
+
+def _resolve_python_forward_annotation(
+    annotation: object,
+    *,
+    resolver: Callable[[str], object | None],
+) -> object:
+    if isinstance(annotation, str):
+        resolved = resolver(annotation)
+        if resolved is not None:
+            return resolved
+        return annotation
+
+    forward_arg = getattr(annotation, "__forward_arg__", None)
+    if isinstance(forward_arg, str):
+        resolved = resolver(forward_arg)
+        if resolved is not None:
+            return resolved
+
+    return annotation
+
+
+def _assert_python_union_expected_compatible(
+    expected: object,
+    actual: object,
+    *,
+    resolver: Callable[[str], object | None],
+    seen: set[tuple[str, str]],
+) -> None:
+    expected_members = _python_union_members(expected)
+    actual_members = _python_union_members(actual)
+    if expected_members is None or actual_members is None:
+        msg = f"Expected Python union for both types, got: {expected!r} and {actual!r}"
+        raise AssertionError(msg)
+
+    for expected_member in expected_members:
+        if any(
+            _python_expected_member_matches_actual(
+                expected_member,
+                actual_member,
+                resolver=resolver,
+                seen=seen,
+            )
+            for actual_member in actual_members
+        ):
+            continue
+        msg = f"Union mismatch: expected={expected!r} actual={actual!r}"
+        raise AssertionError(msg)
+
+    for actual_member in actual_members:
+        if any(
+            _python_expected_member_matches_actual(
+                expected_member,
+                actual_member,
+                resolver=resolver,
+                seen=seen,
+            )
+            for expected_member in expected_members
+        ):
+            continue
+        msg = f"Union mismatch: expected={expected!r} actual={actual!r}"
+        raise AssertionError(msg)
+
+
+def _assert_python_list_expected_compatible(
+    expected: object,
+    actual: object,
+    *,
+    resolver: Callable[[str], object | None],
+    seen: set[tuple[str, str]],
+) -> None:
+    expected_args = get_args(expected)
+    actual_args = get_args(actual)
+    if len(expected_args) != 1 or len(actual_args) != 1:
+        msg = f"Unsupported list args: expected={expected!r} actual={actual!r}"
+        raise AssertionError(msg)
+
+    _assert_python_expected_compatible(
+        expected_args[0],
+        actual_args[0],
+        resolver=resolver,
+        seen=seen,
+    )
+
+
+def _assert_python_dict_expected_compatible(
+    expected: object,
+    actual: object,
+    *,
+    resolver: Callable[[str], object | None],
+    seen: set[tuple[str, str]],
+) -> None:
+    expected_args = get_args(expected)
+    actual_args = get_args(actual)
+    if len(expected_args) != 2 or len(actual_args) != 2:
+        msg = f"Unsupported dict args: expected={expected!r} actual={actual!r}"
+        raise AssertionError(msg)
+
+    _assert_python_expected_compatible(
+        expected_args[0],
+        actual_args[0],
+        resolver=resolver,
+        seen=seen,
+    )
+    _assert_python_expected_compatible(
+        expected_args[1],
+        actual_args[1],
+        resolver=resolver,
+        seen=seen,
+    )

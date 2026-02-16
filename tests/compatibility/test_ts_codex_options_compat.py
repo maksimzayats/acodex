@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import get_args, get_origin, get_type_hints
 
+import pytest
 from typing_extensions import NotRequired
 
 from acodex.types import codex_options as py_codex_options
@@ -99,6 +100,27 @@ def test_codex_config_object_index_signature_matches_python_shape() -> None:
     py_alias = py_codex_options.CodexConfigObject
     assert get_origin(py_alias) is dict, "CodexConfigObject must be dict[...] in Python"
     assert_ts_expr_compatible(ts_expr, py_alias, resolver=_resolver)
+
+
+def test_codex_config_object_identifier_matches_resolved_codex_options_config_shape() -> None:
+    py_hints = get_type_hints(
+        py_codex_options.CodexOptions,
+        include_extras=True,
+        localns={"NotRequired": NotRequired, **py_codex_options.__dict__},
+    )
+    config_hint = unwrap_not_required(py_hints["config"])
+    assert get_origin(config_hint) is dict
+
+    assert_ts_expr_compatible(TsIdentifier("CodexConfigObject"), config_hint, resolver=_resolver)
+
+
+def test_structural_union_compatibility_remains_strict_for_mismatch() -> None:
+    with pytest.raises(AssertionError):
+        assert_ts_expr_compatible(
+            TsUnion((TsPrimitive("string"), TsPrimitive("boolean"))),
+            str | int,
+            resolver=_resolver,
+        )
 
 
 def _resolver(name: str) -> object | None:
