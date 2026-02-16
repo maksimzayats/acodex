@@ -38,6 +38,10 @@ class CodexThreadStreamNotConsumedError(CodexThreadRunError):
     """Raised when streamed.result is accessed before streamed.events is exhausted."""
 
 
+class CodexStructuredResponseError(CodexThreadRunError):
+    """Raised when structured output cannot be created or accessed."""
+
+
 class CodexConfigError(CodexError):
     """Raised when Codex config overrides are invalid or cannot be serialized."""
 
