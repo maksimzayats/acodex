@@ -5,6 +5,7 @@ from typing import Generic, TypeVar, cast
 
 from pydantic import TypeAdapter
 
+from acodex.exceptions import CodexStructuredResponseError
 from acodex.types.turn_options import OutputSchemaInput
 
 T = TypeVar("T")
@@ -40,4 +41,9 @@ class OutputTypeAdapter(Generic[T]):
         if self._adapter is None:
             return cast("T", json.loads(json_string))
 
-        return self._adapter.validate_json(json_string)
+        try:
+            return self._adapter.validate_json(json_string)
+        except Exception as e:
+            raise CodexStructuredResponseError(
+                "Failed to validate structured response against output schema.",
+            ) from e
