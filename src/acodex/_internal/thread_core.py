@@ -416,11 +416,9 @@ def build_turn_or_raise(
     if state.failure_message is not None:
         raise CodexThreadRunError(state.failure_message)
 
-    structured_response = output_type_adapter.validate_json(state.final_response)
-
     return Turn(
         items=state.items,
         final_response=state.final_response,
         usage=state.usage,
-        structured_response=structured_response,
+        structured_response_factory=lambda: output_type_adapter.validate_json(state.final_response),
     )

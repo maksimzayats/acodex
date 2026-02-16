@@ -26,8 +26,11 @@ def test_turn_alias_matches_python_dataclass() -> None:
     )
 
     python_only_fields = set(py_fields) - set(ts_props)
-    assert python_only_fields == {"structured_response"}, (
+    assert python_only_fields == {"structured_response_factory"}, (
         f"Unexpected Python-only Turn fields: {sorted(python_only_fields)}"
+    )
+    assert isinstance(getattr(py_symbol, "structured_response", None), property), (
+        "Python Turn must expose structured_response as a property"
     )
 
     py_hints = get_type_hints(py_symbol, include_extras=True)

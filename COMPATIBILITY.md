@@ -80,7 +80,7 @@ Current enforced divergences:
   - TS `Thread.run` / `runStreamed` do not expose `outputType`, and TS `Turn` does not include
     `structuredResponse`.
   - Python adds optional `output_type` parameters on sync/async `run` + `run_streamed`, plus
-    `Turn.structured_response`.
+    `Turn.structured_response` (backed by Python-only `Turn.structured_response_factory`).
   - Doc: `DIFFERENCES.md` (“Python-only typed structured output”)
   - Tests:
     - `tests/compatibility/test_ts_thread_types_compat.py`
@@ -302,7 +302,8 @@ Turn options:
   - `Turn` object type parity (TS-required subset):
     - `finalResponse` (TS) -> `final_response` (Python)
     - `Usage | null` (TS) -> `Usage | None` (Python)
-    - Python-only `structured_response` field is asserted as an intentional divergence
+    - Python-only `structured_response_factory` field is asserted as an intentional divergence
+    - `structured_response` remains available as a property
   - `UserInput` union parity: variant dataclasses and discriminator literals
   - `Input` union parity: `string | UserInput[]` -> `str | list[UserInput]`
 

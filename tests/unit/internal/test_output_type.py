@@ -87,7 +87,7 @@ def test_validate_json_with_output_schema_only_invalid_json_raises_structured_er
     assert error.value.__cause__ is not None
 
 
-def test_validate_json_without_output_type_or_schema_returns_raw_string_without_pydantic(
+def test_validate_json_without_output_type_or_schema_raises_structured_error_without_pydantic(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     real_import_module = importlib.import_module
@@ -101,9 +101,14 @@ def test_validate_json_without_output_type_or_schema_returns_raw_string_without_
 
     adapter: OutputTypeAdapter[str] = OutputTypeAdapter()
 
-    payload = adapter.validate_json("plain text response")
-
-    assert payload == "plain text response"
+    with pytest.raises(
+        CodexStructuredResponseError,
+        match=(
+            "No output schema available for validating structured response\\. "
+            "Provide an `output_type` or `output_schema` to enable validation\\."
+        ),
+    ):
+        adapter.validate_json("plain text response")
 
 
 def test_validate_json_with_output_schema_only_works_without_pydantic(

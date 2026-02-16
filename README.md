@@ -62,8 +62,18 @@ from acodex import Codex
 codex = Codex()
 thread = codex.start_thread()
 
-turn = thread.run("Diagnose the test failure and propose a fix")
-print(turn.final_response)
+schema = {
+    "type": "object",
+    "properties": {"summary": {"type": "string"}},
+    "required": ["summary"],
+    "additionalProperties": False,
+}
+
+turn = thread.run(
+    'Summarize repository health. Return JSON: {"summary": "..."}',
+    output_schema=schema,
+)
+print(turn.structured_response["summary"])
 print(turn.items)
 ```
 
@@ -79,8 +89,17 @@ from acodex import Codex, ItemCompletedEvent, TurnCompletedEvent, TurnFailedEven
 
 codex = Codex()
 thread = codex.start_thread()
+schema = {
+    "type": "object",
+    "properties": {"summary": {"type": "string"}},
+    "required": ["summary"],
+    "additionalProperties": False,
+}
 
-streamed = thread.run_streamed("Implement the fix")
+streamed = thread.run_streamed(
+    'Summarize implementation status. Return JSON: {"summary": "..."}',
+    output_schema=schema,
+)
 for event in streamed.events:
     if isinstance(event, ItemCompletedEvent):
         print("item", event.item)
@@ -90,7 +109,7 @@ for event in streamed.events:
         print("error", event.error.message)
 
 turn = streamed.result
-print(turn.final_response)
+print(turn.structured_response["summary"])
 ```
 
 `streamed.result` is available only after `streamed.events` is fully consumed.
@@ -99,9 +118,18 @@ print(turn.final_response)
 
 `turn.structured_response` behaves in three modes:
 
-- no `output_schema` and no `output_type`: raw text passthrough (`structured_response == final_response`)
-- `output_schema` only: parse JSON (`json.loads(final_response)`)
-- `output_type` provided: validate JSON with Pydantic and return typed data
+- no `output_schema` and no `output_type`: accessing `turn.structured_response` raises
+  `CodexStructuredResponseError`
+- `output_schema` only: accessing `turn.structured_response` parses JSON
+  (`json.loads(final_response)`)
+- `output_type` provided: accessing `turn.structured_response` validates JSON with Pydantic and
+  returns typed data
+
+Structured parsing and validation are lazy and happen only when `turn.structured_response` is
+accessed.
+
+When both are missing, the error message is:
+`No output schema available for validating structured response. Provide an \`output_type\` or \`output_schema\` to enable validation.`
 
 Schema-only parsing:
 
@@ -143,6 +171,7 @@ print(turn.structured_response.summary)
 
 `CodexStructuredResponseError` is raised when structured parsing or validation fails:
 
+- missing both `output_schema` and `output_type`
 - invalid JSON for `output_schema`-only runs
 - payload that does not match `output_type`
 
@@ -155,13 +184,20 @@ from acodex import Codex
 from acodex.types.input import UserInputLocalImage, UserInputText
 
 thread = Codex().start_thread()
+schema = {
+    "type": "object",
+    "properties": {"description": {"type": "string"}},
+    "required": ["description"],
+    "additionalProperties": False,
+}
 turn = thread.run(
     [
-        UserInputText(text="Describe this image"),
+        UserInputText(text='Describe this image. Return JSON: {"description": "..."}'),
         UserInputLocalImage(path="./ui.png"),
     ],
+    output_schema=schema,
 )
-print(turn.final_response)
+print(turn.structured_response["description"])
 ```
 
 ## Async (brief)
@@ -174,8 +210,17 @@ from acodex import AsyncCodex
 
 async def main() -> None:
     thread = AsyncCodex().start_thread()
-    turn = await thread.run("Hello from async")
-    print(turn.final_response)
+    schema = {
+        "type": "object",
+        "properties": {"message": {"type": "string"}},
+        "required": ["message"],
+        "additionalProperties": False,
+    }
+    turn = await thread.run(
+        'Say hello from async. Return JSON: {"message": "..."}',
+        output_schema=schema,
+    )
+    print(turn.structured_response["message"])
 
 
 asyncio.run(main())

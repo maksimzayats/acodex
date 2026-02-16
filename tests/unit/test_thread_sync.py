@@ -168,7 +168,14 @@ def test_thread_run_returns_completed_turn_with_final_response_and_usage(tmp_pat
 
     assert len(turn.items) == 2
     assert turn.final_response == "final answer"
-    assert turn.structured_response == turn.final_response
+    with pytest.raises(
+        CodexStructuredResponseError,
+        match=(
+            "No output schema available for validating structured response\\. "
+            "Provide an `output_type` or `output_schema` to enable validation\\."
+        ),
+    ):
+        _ = turn.structured_response
     assert turn.usage is not None
     assert turn.usage.input_tokens == 10
     assert turn.usage.cached_input_tokens == 2
@@ -213,8 +220,10 @@ def test_thread_run_raises_on_invalid_output_type_payload(tmp_path: Path) -> Non
         },
     )
 
+    turn = thread.run("hello", output_type=_StructuredPayload)
+
     with pytest.raises(CodexStructuredResponseError):
-        thread.run("hello", output_type=_StructuredPayload)
+        _ = turn.structured_response
 
 
 def test_thread_run_raises_on_invalid_json_with_output_schema_only(tmp_path: Path) -> None:
@@ -226,8 +235,10 @@ def test_thread_run_raises_on_invalid_json_with_output_schema_only(tmp_path: Pat
         },
     )
 
+    turn = thread.run("hello", output_schema={"type": "object"})
+
     with pytest.raises(CodexStructuredResponseError):
-        thread.run("hello", output_schema={"type": "object"})
+        _ = turn.structured_response
 
 
 def test_thread_run_drains_events_after_turn_failed(tmp_path: Path) -> None:

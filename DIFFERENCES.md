@@ -233,14 +233,15 @@ Usage implication:
     `AsyncThread.run_streamed`
   - `Turn.structured_response` on completed turn models
 
-Behavior modes:
+Behavior modes (on `Turn.structured_response` access):
 
 - no `output_type` and no `output_schema`:
-  - `structured_response` is the raw `final_response` string (passthrough)
+  - raises `CodexStructuredResponseError` with message:
+    `No output schema available for validating structured response. Provide an \`output_type\` or \`output_schema\` to enable validation.`
 - `output_schema` only:
-  - `structured_response` is `json.loads(final_response)`
+  - `structured_response` parses `json.loads(final_response)`
 - `output_type` provided:
-  - `structured_response` is validated via `pydantic.TypeAdapter.validate_json`
+  - `structured_response` validates via `pydantic.TypeAdapter.validate_json`
   - validation failures raise `CodexStructuredResponseError`
 - both `output_type` and `output_schema`:
   - CLI schema file uses `output_schema`
@@ -252,6 +253,6 @@ References:
   `src/acodex/types/turn.py`
 - Compatibility assertions:
   - `tests/compatibility/test_ts_thread_types_compat.py` (TS Turn fields are a subset; Python adds
-    `structured_response`)
+    `structured_response_factory` as a backing field and keeps `structured_response` as a property)
   - `tests/compatibility/test_ts_class_surface_compat.py` (Python-only optional `output_type`
     parameter)

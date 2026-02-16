@@ -71,4 +71,7 @@ class OutputTypeAdapter(Generic[T]):
                     "Failed to parse structured response as JSON.",
                 ) from error
 
-        return cast("T", json_string)
+        raise CodexStructuredResponseError(
+            "No output schema available for validating structured response. "
+            "Provide an `output_type` or `output_schema` to enable validation.",
+        )

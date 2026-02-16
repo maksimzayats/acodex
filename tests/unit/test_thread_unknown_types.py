@@ -18,7 +18,7 @@ from acodex._internal.thread_core import (
     parse_thread_item,
     reduce_turn_state,
 )
-from acodex.exceptions import CodexThreadRunError
+from acodex.exceptions import CodexStructuredResponseError, CodexThreadRunError
 from acodex.exec import CodexExec
 from acodex.thread import Thread
 from acodex.types.events import ItemCompletedEvent, ThreadEvent, TurnCompletedEvent, TurnFailedEvent
@@ -330,7 +330,14 @@ def test_turn_state_reduction_builds_turn_and_raises_on_failure() -> None:
     output_type_adapter: OutputTypeAdapter[str] = OutputTypeAdapter()
     turn = build_turn_or_raise(completed_state, output_type_adapter=output_type_adapter)
     assert turn.final_response == "hello"
-    assert turn.structured_response == "hello"
+    with pytest.raises(
+        CodexStructuredResponseError,
+        match=(
+            "No output schema available for validating structured response\\. "
+            "Provide an `output_type` or `output_schema` to enable validation\\."
+        ),
+    ):
+        _ = turn.structured_response
     assert turn.usage is not None
     assert turn.usage.output_tokens == 2
     assert len(turn.items) == 1
