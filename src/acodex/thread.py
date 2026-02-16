@@ -29,9 +29,6 @@ else:
     T = TypeVar("T")
 
 
-_missing = object()
-
-
 class Thread:
     """Represent a thread of conversation with the agent.
 
