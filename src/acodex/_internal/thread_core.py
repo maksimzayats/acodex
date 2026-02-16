@@ -3,9 +3,10 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Callable
-from typing import NamedTuple, cast
+from typing import NamedTuple, TypeVar, cast
 
-from acodex.exceptions import CodexThreadRunError
+from acodex._internal.output_type import OutputTypeAdapter
+from acodex.exceptions import CodexStructuredResponseError, CodexThreadRunError
 from acodex.types.events import (
     ItemCompletedEvent,
     ItemStartedEvent,
@@ -40,6 +41,8 @@ from acodex.types.items import (
     WebSearchItem,
 )
 from acodex.types.turn import Turn
+
+T = TypeVar("T")
 
 logger = logging.getLogger(__name__)
 
@@ -406,12 +409,23 @@ def reduce_turn_state(state: TurnState, event: ThreadEvent) -> TurnState:
     )
 
 
-def build_turn_or_raise(state: TurnState) -> Turn:
+def build_turn_or_raise(
+    state: TurnState,
+    output_type_adapter: OutputTypeAdapter[T],
+) -> Turn[T]:
     if state.failure_message is not None:
         raise CodexThreadRunError(state.failure_message)
+
+    try:
+        structured_response = output_type_adapter.validate_json(state.final_response)
+    except Exception as error:
+        raise CodexStructuredResponseError(
+            "output_type was requested but structured payload failed validation",
+        ) from error
 
     return Turn(
         items=state.items,
         final_response=state.final_response,
         usage=state.usage,
+        structured_response=structured_response,
     )
