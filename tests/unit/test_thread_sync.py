@@ -212,6 +212,7 @@ def test_thread_run_validates_payload_when_output_type_is_provided(tmp_path: Pat
     assert turn.structured_response == {"status": "ok", "count": 1}
 
 
+@skip_output_type_tests_on_py315
 def test_thread_run_raises_on_invalid_output_type_payload(tmp_path: Path) -> None:
     thread = _build_thread(
         tmp_path,
