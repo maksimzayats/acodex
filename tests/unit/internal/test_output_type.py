@@ -3,6 +3,8 @@ from __future__ import annotations
 import importlib
 import json
 import sys
+from collections.abc import Iterator
+from typing import cast
 
 import pytest
 from typing_extensions import TypedDict
@@ -28,10 +30,25 @@ class _TypedCheckResult(TypedDict):
     comments: list[_TypedComment]
 
 
+class _TypedNullableCommentResult(TypedDict):
+    comment: _TypedComment | None
+
+
 skip_output_type_tests_on_py315 = pytest.mark.skipif(
     sys.version_info >= (3, 15),
     reason="Pydantic is not available on Python 3.15+.",
 )
+
+
+def _iter_schema_nodes(value: object) -> Iterator[OutputSchemaInput]:
+    if isinstance(value, dict):
+        node = cast("OutputSchemaInput", value)
+        yield node
+        for child in node.values():
+            yield from _iter_schema_nodes(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _iter_schema_nodes(child)
 
 
 @skip_output_type_tests_on_py315
@@ -62,6 +79,67 @@ def test_json_schema_from_nested_output_type_is_json_serializable() -> None:
     schema = adapter.json_schema()
     assert schema is not None
     assert isinstance(json.dumps(schema), str)
+
+
+def test_json_schema_without_output_type_or_output_schema_returns_none() -> None:
+    adapter: OutputTypeAdapter[str] = OutputTypeAdapter()
+
+    assert adapter.json_schema() is None
+
+
+@skip_output_type_tests_on_py315
+def test_json_schema_from_nested_output_type_sets_additional_properties_false_recursively() -> None:
+    adapter: OutputTypeAdapter[_TypedCheckResult] = OutputTypeAdapter(
+        output_type=_TypedCheckResult,
+    )
+
+    schema = adapter.json_schema()
+    assert schema is not None
+
+    for node in _iter_schema_nodes(schema):
+        if node.get("type") == "object":
+            assert node.get("additionalProperties") is False
+
+
+@skip_output_type_tests_on_py315
+def test_json_schema_from_nested_output_type_replaces_refs() -> None:
+    adapter: OutputTypeAdapter[_TypedCheckResult] = OutputTypeAdapter(
+        output_type=_TypedCheckResult,
+    )
+
+    schema = adapter.json_schema()
+    assert schema is not None
+
+    for node in _iter_schema_nodes(schema):
+        assert "$ref" not in node
+
+
+@skip_output_type_tests_on_py315
+def test_json_schema_does_not_inject_additional_properties_for_non_object_nodes() -> None:
+    adapter: OutputTypeAdapter[_TypedCheckResult] = OutputTypeAdapter(
+        output_type=_TypedCheckResult,
+    )
+
+    schema = adapter.json_schema()
+    assert schema is not None
+
+    for node in _iter_schema_nodes(schema):
+        if node.get("type") != "object":
+            assert "additionalProperties" not in node
+
+
+@skip_output_type_tests_on_py315
+def test_json_schema_from_union_output_type_sets_additional_properties_false_for_objects() -> None:
+    adapter: OutputTypeAdapter[_TypedNullableCommentResult] = OutputTypeAdapter(
+        output_type=_TypedNullableCommentResult,
+    )
+
+    schema = adapter.json_schema()
+    assert schema is not None
+
+    for node in _iter_schema_nodes(schema):
+        if node.get("type") == "object":
+            assert node.get("additionalProperties") is False
 
 
 @skip_output_type_tests_on_py315
