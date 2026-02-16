@@ -46,7 +46,8 @@ def test_codex_options_keys_optionality_and_types_match_typescript() -> None:
         localns={"NotRequired": NotRequired, **py_codex_options.__dict__},
     )
     for key, ts_prop in ts_props.items():
-        assert get_origin(py_hints[key]).__name__ == "NotRequired"
+        origin = get_origin(py_hints[key])
+        assert getattr(origin, "__name__", None) == "NotRequired"
         py_hint = unwrap_not_required(py_hints[key])
         assert_ts_expr_compatible(ts_prop.type_expr, py_hint, resolver=_resolver)
 
@@ -114,6 +115,43 @@ def test_codex_config_object_identifier_matches_resolved_codex_options_config_sh
     assert_ts_expr_compatible(TsIdentifier("CodexConfigObject"), config_hint, resolver=_resolver)
 
 
+def test_codex_config_value_union_recursive_branches_parse_and_resolve() -> None:
+    ts_source = (VENDOR_TS_SDK_SRC / "codexOptions.ts").read_text(encoding="utf-8")
+    ts_rhs = extract_exported_type_alias_rhs(ts_source, "CodexConfigValue")
+    ts_expr = parse_ts_type_expr(ts_rhs)
+    assert isinstance(ts_expr, TsUnion), "CodexConfigValue must be a union in TypeScript"
+
+    ts_members_by_label = {
+        _codex_config_value_member_label(member): member for member in ts_expr.members
+    }
+    assert set(ts_members_by_label) == {
+        "string",
+        "number",
+        "boolean",
+        "CodexConfigValue[]",
+        "CodexConfigObject",
+    }, f"Unexpected CodexConfigValue union members: {sorted(ts_members_by_label)}"
+
+    py_union_members = get_args(py_codex_options.CodexConfigValue)
+    py_list_member = next(member for member in py_union_members if get_origin(member) is list)
+    py_dict_member = next(member for member in py_union_members if get_origin(member) is dict)
+
+    assert_ts_expr_compatible(ts_members_by_label["string"], str, resolver=_resolver)
+    assert_ts_expr_compatible(ts_members_by_label["number"], int | float, resolver=_resolver)
+    assert_ts_expr_compatible(ts_members_by_label["boolean"], bool, resolver=_resolver)
+
+    array_branch = ts_members_by_label["CodexConfigValue[]"]
+    assert isinstance(array_branch, TsArray)
+    assert isinstance(array_branch.element, TsIdentifier)
+    assert _resolver(array_branch.element.name) == py_codex_options.CodexConfigValue
+    assert_ts_expr_compatible(array_branch, py_list_member, resolver=_resolver)
+
+    object_branch = ts_members_by_label["CodexConfigObject"]
+    assert isinstance(object_branch, TsIdentifier)
+    assert _resolver(object_branch.name) == py_codex_options.CodexConfigObject
+    assert_ts_expr_compatible(object_branch, py_dict_member, resolver=_resolver)
+
+
 def test_structural_union_compatibility_remains_strict_for_mismatch() -> None:
     with pytest.raises(AssertionError):
         assert_ts_expr_compatible(
@@ -125,3 +163,15 @@ def test_structural_union_compatibility_remains_strict_for_mismatch() -> None:
 
 def _resolver(name: str) -> object | None:
     return getattr(py_codex_options, name, None)
+
+
+def _codex_config_value_member_label(member: object) -> str:
+    if isinstance(member, TsPrimitive):
+        return member.name
+    if isinstance(member, TsIdentifier):
+        return member.name
+    if isinstance(member, TsArray) and isinstance(member.element, TsIdentifier):
+        return f"{member.element.name}[]"
+
+    msg = f"Unsupported CodexConfigValue union member: {member!r}"
+    raise AssertionError(msg)
