@@ -94,6 +94,37 @@ def parse_exported_type_aliases(ts_source: str) -> dict[str, TsAlias]:
     return aliases
 
 
+def extract_exported_type_alias_rhs(ts_source: str, alias_name: str) -> str:
+    """Extract the right-hand-side type expression for an exported type alias.
+
+    This is intentionally low-level: it strips comments and returns the raw RHS string captured up
+    to the terminating semicolon.
+
+    Args:
+        ts_source: TypeScript source text.
+        alias_name: Name of the exported type alias (e.g. ``"Input"``).
+
+    Returns:
+        The RHS expression text, without surrounding whitespace.
+
+    Raises:
+        ValueError: When the alias is not found or cannot be parsed.
+
+    """
+    stripped_source = _strip_comments(ts_source)
+    alias_pattern = re.compile(
+        rf"\bexport\s+type\s+{re.escape(alias_name)}\s*=",
+        re.MULTILINE,
+    )
+    match = alias_pattern.search(stripped_source)
+    if match is None:
+        msg = f"Could not find exported type alias: {alias_name!r}"
+        raise ValueError(msg)
+
+    alias_rhs, _ = _capture_rhs_until_semicolon(stripped_source, start=match.end())
+    return alias_rhs.strip()
+
+
 def _strip_comments(source: str) -> str:
     result: list[str] = []
     index = 0
