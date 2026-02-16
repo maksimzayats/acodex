@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
-from typing import cast
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from typing_extensions import Unpack
 
@@ -25,6 +25,14 @@ from acodex.types.turn import (
     RunStreamedResult,
 )
 from acodex.types.turn_options import TurnOptions
+
+if TYPE_CHECKING:
+    T = TypeVar("T", default=Any)
+else:
+    T = TypeVar("T")
+
+
+_missing = object()
 
 
 class Thread:
@@ -57,6 +65,7 @@ class Thread:
     def run_streamed(
         self,
         input: Input,  # noqa: A002
+        output_type: type[T] = _missing,
         **turn_options: Unpack[TurnOptions],
     ) -> RunStreamedResult:
         """Provide input to the agent and stream turn events as they are produced.
@@ -114,6 +123,7 @@ class Thread:
     def run(
         self,
         input: Input,  # noqa: A002
+        output_type: type[T] = _missing,
         **turn_options: Unpack[TurnOptions],
     ) -> RunResult:
         """Provide input to the agent and return the completed turn.
@@ -166,6 +176,7 @@ class AsyncThread:
     async def run_streamed(
         self,
         input: Input,  # noqa: A002
+        output_type: type[T] = _missing,
         **turn_options: Unpack[TurnOptions],
     ) -> AsyncRunStreamedResult:
         """Provide input to the agent and stream turn events as they are produced.
@@ -223,6 +234,7 @@ class AsyncThread:
     async def run(
         self,
         input: Input,  # noqa: A002
+        output_type: type[T] = _missing,
         **turn_options: Unpack[TurnOptions],
     ) -> RunResult:
         """Provide input to the agent and return the completed turn.
