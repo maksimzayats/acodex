@@ -56,7 +56,7 @@ Compatibility is enforced for public exports and their directly referenced contr
 
 ## Documented divergences
 
-All intentional Python deviations from the TypeScript SDK must be documented in `differences.md`
+All intentional Python deviations from the TypeScript SDK must be documented in `DIFFERENCES.md`
 and asserted in compatibility tests.
 
 Current enforced divergences:
@@ -65,7 +65,7 @@ Current enforced divergences:
   - TS: `TurnOptions.signal?: AbortSignal` in `vendor/codex-ts-sdk/src/turnOptions.ts`
   - Python: `TurnSignal = threading.Event | asyncio.Event` and `TurnOptions.signal` in
     `src/acodex/types/turn_options.py`
-  - Doc: `differences.md` (“Cancellation primitive”)
+  - Doc: `DIFFERENCES.md` (“Cancellation primitive”)
   - Test: `tests/compatibility/test_ts_turn_options_compat.py`
 
 - Sync + async dual surface:
@@ -73,10 +73,10 @@ Current enforced divergences:
     an `AsyncGenerator<ThreadEvent>`).
   - Python provides both sync (`Codex`, `Thread`) and async (`AsyncCodex`, `AsyncThread`) surfaces
     while still supporting the TS behavior (async streaming via `AsyncThread.run_streamed`).
-  - Doc: `differences.md` (“Dual sync and async client surfaces”)
+  - Doc: `DIFFERENCES.md` (“Dual sync and async client surfaces”)
   - Test: `tests/compatibility/test_ts_class_surface_compat.py`
 
-If you add a new divergence, update `differences.md` and add/adjust a compatibility assertion for
+If you add a new divergence, update `DIFFERENCES.md` and add/adjust a compatibility assertion for
 it in `tests/compatibility/`.
 
 ## Name mapping (TS -> Python)
@@ -322,7 +322,7 @@ When the TS SDK changes in `vendor/codex-ts-sdk/src/`:
 2. If compatibility tests fail:
    - Determine whether the TS change is intentional and should be reflected in Python.
    - Update Python types/classes to match TS contracts, or (rarely) add a documented divergence:
-     - update `differences.md`
+     - update `DIFFERENCES.md`
      - update/add a compatibility assertion for the divergence
 3. Re-run gates:
    - `make format`

@@ -111,6 +111,6 @@ testing standards. Prefer uv for all tooling.
 - Keep public API method names and option keys snake_case only; do not add camelCase aliases unless explicitly requested.
 - The TypeScript SDK (`vendor/codex-ts-sdk/src`) is the source of truth for features and behavior.
 - Target one-to-one feature parity with the TypeScript SDK for all public APIs.
-- Pythonic deviations are allowed only when explicitly documented in `differences.md`.
-- Before implementing any feature or behavior change, check `differences.md` first and follow existing documented divergences.
-- If a new Pythonic divergence is needed, document it in `differences.md` in the same change.
+- Pythonic deviations are allowed only when explicitly documented in `DIFFERENCES.md`.
+- Before implementing any feature or behavior change, check `DIFFERENCES.md` first and follow existing documented divergences.
+- If a new Pythonic divergence is needed, document it in `DIFFERENCES.md` in the same change.

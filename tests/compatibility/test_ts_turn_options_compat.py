@@ -47,7 +47,7 @@ def test_turn_options_keys_optionality_and_types_match_typescript() -> None:
 def test_turn_signal_divergence_is_asserted() -> None:
     members = set(get_args(py_turn_options.TurnSignal))
     assert members == {threading.Event, asyncio.Event}, (
-        "TurnSignal must be threading.Event | asyncio.Event per differences.md"
+        "TurnSignal must be threading.Event | asyncio.Event per DIFFERENCES.md"
     )
 
     py_hints = get_type_hints(

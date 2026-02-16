@@ -159,7 +159,7 @@ asyncio.run(main())
 - GitHub: https://github.com/maksimzayats/acodex
 - Issues: https://github.com/maksimzayats/acodex/issues
 - Docs: https://docs.acodex.dev
-- Differences from TS SDK: `differences.md`
+- Differences from TS SDK: `DIFFERENCES.md`
 
 ## License
 
