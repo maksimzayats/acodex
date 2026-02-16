@@ -19,7 +19,8 @@ clients, exposes a streaming event API, and supports structured JSON output via 
 - Fully typed public API (mypy-friendly).
 - Sync and async client surfaces.
 - Stream parsed `ThreadEvent` objects via `run_streamed()`.
-- Completed turns include `turn.final_response`, `turn.items`, and `turn.usage`.
+- Completed turns include `turn.final_response`, `turn.structured_response`, `turn.items`, and
+  `turn.usage`.
 - Attach local images (`UserInputLocalImage`) with stable input normalization for text.
 - Request structured JSON output via `output_schema`.
 - Resume conversations with `resume_thread()` (threads persisted under `~/.codex/sessions`).
@@ -94,30 +95,50 @@ print(turn.final_response)
 
 `streamed.result` is available only after `streamed.events` is fully consumed.
 
-## Structured output (JSON schema)
+## Structured output (`output_schema` + `output_type`)
 
-Provide a JSON Schema per turn via `output_schema`. The agent returns a JSON response string in
-`turn.final_response`.
+`turn.structured_response` behaves in three modes:
+
+- no `output_schema` and no `output_type`: raw text passthrough (`structured_response == final_response`)
+- `output_schema` only: parse JSON (`json.loads(final_response)`)
+- `output_type` provided: validate JSON with Pydantic and return typed data
+
+Schema-only parsing:
 
 ```python
-import json
-
 from acodex import Codex
 
 schema = {
     "type": "object",
-    "properties": {
-        "summary": {"type": "string"},
-        "status": {"type": "string", "enum": ["ok", "action_required"]},
-    },
-    "required": ["summary", "status"],
+    "properties": {"summary": {"type": "string"}},
+    "required": ["summary"],
     "additionalProperties": False,
 }
 
 turn = Codex().start_thread().run("Summarize repository status", output_schema=schema)
-payload = json.loads(turn.final_response)
-print(payload["summary"], payload["status"])
+print(turn.structured_response["summary"])
 ```
+
+Typed validation with `output_type`:
+
+```python
+from typing_extensions import TypedDict
+
+from acodex import Codex
+
+
+class SummaryPayload(TypedDict):
+    summary: str
+
+
+turn = Codex().start_thread().run("Summarize repository status", output_type=SummaryPayload)
+print(turn.structured_response["summary"])
+```
+
+`CodexStructuredResponseError` is raised when structured parsing or validation fails:
+
+- invalid JSON for `output_schema`-only runs
+- payload that does not match `output_type`
 
 ## Images in prompts
 

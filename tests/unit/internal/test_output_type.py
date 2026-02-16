@@ -1,0 +1,81 @@
+from __future__ import annotations
+
+import pytest
+from typing_extensions import TypedDict
+
+from acodex._internal.output_type import OutputTypeAdapter
+from acodex.exceptions import CodexStructuredResponseError
+from acodex.types.turn_options import OutputSchemaInput
+
+
+class _TypedPayload(TypedDict):
+    name: str
+    count: int
+
+
+def test_json_schema_prefers_explicit_output_schema_over_output_type() -> None:
+    schema: OutputSchemaInput = {"type": "object", "properties": {"ok": {"type": "boolean"}}}
+    adapter: OutputTypeAdapter[_TypedPayload] = OutputTypeAdapter(
+        output_type=_TypedPayload,
+        output_schema=schema,
+    )
+
+    assert adapter.json_schema() == schema
+
+
+def test_json_schema_from_output_type_sets_additional_properties_false() -> None:
+    adapter: OutputTypeAdapter[_TypedPayload] = OutputTypeAdapter(output_type=_TypedPayload)
+
+    schema = adapter.json_schema()
+    assert schema is not None
+    assert schema["additionalProperties"] is False
+
+
+def test_validate_json_with_output_type_returns_validated_payload() -> None:
+    adapter: OutputTypeAdapter[_TypedPayload] = OutputTypeAdapter(output_type=_TypedPayload)
+
+    payload = adapter.validate_json('{"name":"ok","count":1}')
+
+    assert payload == {"name": "ok", "count": 1}
+
+
+def test_validate_json_with_output_type_invalid_payload_raises_structured_error() -> None:
+    adapter: OutputTypeAdapter[_TypedPayload] = OutputTypeAdapter(output_type=_TypedPayload)
+
+    with pytest.raises(
+        CodexStructuredResponseError,
+        match="Failed to validate structured response against output schema\\.",
+    ) as error:
+        adapter.validate_json('{"name":"ok","count":"bad"}')
+
+    assert error.value.__cause__ is not None
+
+
+def test_validate_json_with_output_schema_only_parses_json_payload() -> None:
+    schema: OutputSchemaInput = {"type": "object"}
+    adapter: OutputTypeAdapter[dict[str, object]] = OutputTypeAdapter(output_schema=schema)
+
+    payload = adapter.validate_json('{"ok":true,"count":2}')
+
+    assert payload == {"ok": True, "count": 2}
+
+
+def test_validate_json_with_output_schema_only_invalid_json_raises_structured_error() -> None:
+    schema: OutputSchemaInput = {"type": "object"}
+    adapter: OutputTypeAdapter[dict[str, object]] = OutputTypeAdapter(output_schema=schema)
+
+    with pytest.raises(
+        CodexStructuredResponseError,
+        match="Failed to parse structured response as JSON\\.",
+    ) as error:
+        adapter.validate_json("not-json")
+
+    assert error.value.__cause__ is not None
+
+
+def test_validate_json_without_output_type_or_schema_returns_raw_string() -> None:
+    adapter: OutputTypeAdapter[str] = OutputTypeAdapter()
+
+    payload = adapter.validate_json("plain text response")
+
+    assert payload == "plain text response"

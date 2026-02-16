@@ -26,6 +26,7 @@ def test_codex_start_thread_runs_with_fake_executable(tmp_path: Path) -> None:
 
     assert thread.id == "codex-thread-sync"
     assert turn.final_response == "sync response"
+    assert turn.structured_response == "sync response"
 
 
 def test_codex_resume_thread_forwards_resume_id(tmp_path: Path) -> None:
@@ -63,15 +64,16 @@ def test_async_codex_start_thread_runs_with_fake_executable(tmp_path: Path) -> N
         },
     )
 
-    async def run() -> tuple[str | None, str]:
+    async def run() -> tuple[str | None, str, str]:
         thread = client.start_thread()
         turn = await thread.run("hello")
-        return thread.id, turn.final_response
+        return thread.id, turn.final_response, turn.structured_response
 
-    thread_id, final_response = asyncio.run(run())
+    thread_id, final_response, structured_response = asyncio.run(run())
 
     assert thread_id == "codex-thread-async"
     assert final_response == "async response"
+    assert structured_response == "async response"
 
 
 def test_async_codex_resume_thread_forwards_resume_id(tmp_path: Path) -> None:

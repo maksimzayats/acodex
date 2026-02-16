@@ -76,6 +76,16 @@ Current enforced divergences:
   - Doc: `DIFFERENCES.md` (“Dual sync and async client surfaces”)
   - Test: `tests/compatibility/test_ts_class_surface_compat.py`
 
+- Python-only typed structured output:
+  - TS `Thread.run` / `runStreamed` do not expose `outputType`, and TS `Turn` does not include
+    `structuredResponse`.
+  - Python adds optional `output_type` parameters on sync/async `run` + `run_streamed`, plus
+    `Turn.structured_response`.
+  - Doc: `DIFFERENCES.md` (“Python-only typed structured output”)
+  - Tests:
+    - `tests/compatibility/test_ts_thread_types_compat.py`
+    - `tests/compatibility/test_ts_class_surface_compat.py`
+
 If you add a new divergence, update `DIFFERENCES.md` and add/adjust a compatibility assertion for
 it in `tests/compatibility/`.
 
@@ -289,9 +299,10 @@ Turn options:
   - `src/acodex/types/turn.py` (`Turn`)
   - `src/acodex/types/input.py` (`UserInput*`, `Input`)
 - Test: `tests/compatibility/test_ts_thread_types_compat.py`
-  - `Turn` object type parity:
+  - `Turn` object type parity (TS-required subset):
     - `finalResponse` (TS) -> `final_response` (Python)
     - `Usage | null` (TS) -> `Usage | None` (Python)
+    - Python-only `structured_response` field is asserted as an intentional divergence
   - `UserInput` union parity: variant dataclasses and discriminator literals
   - `Input` union parity: `string | UserInput[]` -> `str | list[UserInput]`
 
@@ -310,6 +321,7 @@ Turn options:
     - `start_thread`: no required args besides `self`
     - `resume_thread`: exactly one required positional `thread_id`
     - `run`/`run_streamed`: exactly one required positional `input`
+    - optional Python-only `output_type` parameter exists on sync and async thread methods
   - Confirms Python is not async-only:
     - `Thread` provides sync methods
     - `AsyncThread` provides async methods (coroutine functions)

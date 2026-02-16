@@ -9,6 +9,7 @@ from typing import Any, cast
 import pytest
 
 from acodex._internal.exec import CodexExecArgs
+from acodex._internal.output_type import OutputTypeAdapter
 from acodex._internal.thread_core import (
     build_turn_or_raise,
     initial_turn_state,
@@ -326,8 +327,10 @@ def test_turn_state_reduction_builds_turn_and_raises_on_failure() -> None:
     for event in completed_events:
         completed_state = reduce_turn_state(completed_state, event)
 
-    turn = build_turn_or_raise(completed_state)
+    output_type_adapter: OutputTypeAdapter[str] = OutputTypeAdapter()
+    turn = build_turn_or_raise(completed_state, output_type_adapter=output_type_adapter)
     assert turn.final_response == "hello"
+    assert turn.structured_response == "hello"
     assert turn.usage is not None
     assert turn.usage.output_tokens == 2
     assert len(turn.items) == 1
@@ -342,7 +345,7 @@ def test_turn_state_reduction_builds_turn_and_raises_on_failure() -> None:
     failed_state = reduce_turn_state(failed_state, failed_event)
 
     with pytest.raises(CodexThreadRunError, match="failed"):
-        build_turn_or_raise(failed_state)
+        build_turn_or_raise(failed_state, output_type_adapter=OutputTypeAdapter[str]())
 
 
 def test_reduce_turn_state_does_not_set_final_response_for_non_agent_item() -> None:

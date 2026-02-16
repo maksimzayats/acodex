@@ -223,3 +223,35 @@ Usage implication:
 - Consume `streamed.events` completely, then access `streamed.result`.
 - Accessing `streamed.result` before full consumption raises
   `CodexThreadStreamNotConsumedError`.
+
+## 10) Python-only typed structured output (`output_type` + `structured_response`)
+
+- TypeScript `Thread.run` / `runStreamed` expose `turnOptions.outputSchema` but do not expose a
+  method-level typed output adapter argument.
+- Python adds:
+  - `output_type` on `Thread.run`, `Thread.run_streamed`, `AsyncThread.run`, and
+    `AsyncThread.run_streamed`
+  - `Turn.structured_response` on completed turn models
+
+Behavior modes:
+
+- no `output_type` and no `output_schema`:
+  - `structured_response` is the raw `final_response` string (passthrough)
+- `output_schema` only:
+  - `structured_response` is `json.loads(final_response)`
+- `output_type` provided:
+  - `structured_response` is validated via `pydantic.TypeAdapter.validate_json`
+  - validation failures raise `CodexStructuredResponseError`
+- both `output_type` and `output_schema`:
+  - CLI schema file uses `output_schema`
+  - `structured_response` validation uses `output_type`
+
+References:
+
+- Python implementation: `src/acodex/thread.py`, `src/acodex/_internal/output_type.py`,
+  `src/acodex/types/turn.py`
+- Compatibility assertions:
+  - `tests/compatibility/test_ts_thread_types_compat.py` (TS Turn fields are a subset; Python adds
+    `structured_response`)
+  - `tests/compatibility/test_ts_class_surface_compat.py` (Python-only optional `output_type`
+    parameter)

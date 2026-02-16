@@ -6,7 +6,7 @@ from collections.abc import Callable
 from typing import NamedTuple, TypeVar, cast
 
 from acodex._internal.output_type import OutputTypeAdapter
-from acodex.exceptions import CodexStructuredResponseError, CodexThreadRunError
+from acodex.exceptions import CodexThreadRunError
 from acodex.types.events import (
     ItemCompletedEvent,
     ItemStartedEvent,
@@ -416,12 +416,7 @@ def build_turn_or_raise(
     if state.failure_message is not None:
         raise CodexThreadRunError(state.failure_message)
 
-    try:
-        structured_response = output_type_adapter.validate_json(state.final_response)
-    except Exception as error:
-        raise CodexStructuredResponseError(
-            "output_type was requested but structured payload failed validation",
-        ) from error
+    structured_response = output_type_adapter.validate_json(state.final_response)
 
     return Turn(
         items=state.items,

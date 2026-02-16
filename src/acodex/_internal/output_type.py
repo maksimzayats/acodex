@@ -38,12 +38,20 @@ class OutputTypeAdapter(Generic[T]):
         return schema
 
     def validate_json(self, json_string: str | bytes | bytearray) -> T:
-        if self._adapter is None:
-            return cast("T", json.loads(json_string))
+        if self._adapter is not None:
+            try:
+                return self._adapter.validate_json(json_string)
+            except Exception as error:
+                raise CodexStructuredResponseError(
+                    "Failed to validate structured response against output schema.",
+                ) from error
 
-        try:
-            return self._adapter.validate_json(json_string)
-        except Exception as e:
-            raise CodexStructuredResponseError(
-                "Failed to validate structured response against output schema.",
-            ) from e
+        if self._output_schema is not None:
+            try:
+                return cast("T", json.loads(json_string))
+            except Exception as error:
+                raise CodexStructuredResponseError(
+                    "Failed to parse structured response as JSON.",
+                ) from error
+
+        return cast("T", json_string)
