@@ -308,7 +308,9 @@ def _assert_object_dataclass_compatible(
     *,
     resolver: Callable[[str], object | None],
 ) -> None:
-    ts_properties: dict[str, TsObjectProperty] = {prop.name: prop for prop in ts.properties}
+    ts_properties: dict[str, TsObjectProperty] = {
+        camel_to_snake(prop.name): prop for prop in ts.properties
+    }
     py_fields = {field_info.name: field_info for field_info in dataclasses.fields(py)}  # type: ignore[arg-type]
     assert set(ts_properties) == set(py_fields), (
         f"Object fields mismatch: TS={sorted(ts_properties)}, Python={sorted(py_fields)}"
