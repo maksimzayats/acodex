@@ -21,6 +21,12 @@ classifiers = [
 ]
 dependencies = []
 
+[project.optional-dependencies]
+pydantic = [
+    # python 3.15+ currently has no compatible pydantic release
+    "pydantic>=2 ; python_version < '3.15'",
+]
+
 [project.urls]
 Homepage = "https://github.com/maksimzayats/acodex"
 Repository = "https://github.com/maksimzayats/acodex"

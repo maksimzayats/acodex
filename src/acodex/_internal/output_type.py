@@ -1,14 +1,31 @@
 from __future__ import annotations
 
+import importlib
 import json
-from typing import Generic, TypeVar, cast
-
-from pydantic import TypeAdapter
+from typing import TYPE_CHECKING, Generic, TypeVar, cast
 
 from acodex.exceptions import CodexStructuredResponseError
 from acodex.types.turn_options import OutputSchemaInput
 
+if TYPE_CHECKING:
+    from pydantic import TypeAdapter
+
 T = TypeVar("T")
+
+
+def _build_type_adapter(output_type: type[T]) -> TypeAdapter[T]:
+    try:
+        pydantic_module = importlib.import_module("pydantic")
+    except ModuleNotFoundError as error:
+        if error.name == "pydantic":
+            raise CodexStructuredResponseError(
+                "Structured output with `output_type` requires Pydantic. "
+                'Install it with: pip install "acodex[pydantic]".',
+            ) from error
+        raise
+
+    type_adapter = pydantic_module.TypeAdapter
+    return cast("TypeAdapter[T]", type_adapter(type=output_type))
 
 
 class OutputTypeAdapter(Generic[T]):
@@ -21,7 +38,7 @@ class OutputTypeAdapter(Generic[T]):
 
         self._adapter: TypeAdapter[T] | None
         if output_type is not None:
-            self._adapter = TypeAdapter(type=output_type)
+            self._adapter = _build_type_adapter(output_type)
         else:
             self._adapter = None
 

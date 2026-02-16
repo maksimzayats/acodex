@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import importlib
+
 import pytest
 from typing_extensions import TypedDict
 
+import acodex._internal.output_type as output_type_module
 from acodex._internal.output_type import OutputTypeAdapter
 from acodex.exceptions import CodexStructuredResponseError
 from acodex.types.turn_options import OutputSchemaInput
@@ -73,9 +76,81 @@ def test_validate_json_with_output_schema_only_invalid_json_raises_structured_er
     assert error.value.__cause__ is not None
 
 
-def test_validate_json_without_output_type_or_schema_returns_raw_string() -> None:
+def test_validate_json_without_output_type_or_schema_returns_raw_string_without_pydantic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_import_module = importlib.import_module
+
+    def _import_module(name: str, package: str | None = None) -> object:
+        if name == "pydantic":
+            raise AssertionError("pydantic should not be imported")
+        return real_import_module(name, package)
+
+    monkeypatch.setattr(output_type_module.importlib, "import_module", _import_module)
+
     adapter: OutputTypeAdapter[str] = OutputTypeAdapter()
 
     payload = adapter.validate_json("plain text response")
 
     assert payload == "plain text response"
+
+
+def test_validate_json_with_output_schema_only_works_without_pydantic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_import_module = importlib.import_module
+
+    def _import_module(name: str, package: str | None = None) -> object:
+        if name == "pydantic":
+            raise AssertionError("pydantic should not be imported")
+        return real_import_module(name, package)
+
+    monkeypatch.setattr(output_type_module.importlib, "import_module", _import_module)
+
+    schema: OutputSchemaInput = {"type": "object"}
+    adapter: OutputTypeAdapter[dict[str, object]] = OutputTypeAdapter(output_schema=schema)
+
+    payload = adapter.validate_json('{"ok":true}')
+
+    assert payload == {"ok": True}
+
+
+def test_output_type_missing_pydantic_raises_structured_error_with_install_hint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_import_module = importlib.import_module
+
+    def _import_module(name: str, package: str | None = None) -> object:
+        if name == "pydantic":
+            raise ModuleNotFoundError("No module named 'pydantic'", name="pydantic")
+        return real_import_module(name, package)
+
+    monkeypatch.setattr(output_type_module.importlib, "import_module", _import_module)
+
+    with pytest.raises(
+        CodexStructuredResponseError,
+        match='pip install "acodex\\[pydantic\\]"',
+    ) as error:
+        OutputTypeAdapter(output_type=_TypedPayload)
+
+    cause = error.value.__cause__
+    assert isinstance(cause, ModuleNotFoundError)
+    assert cause.name == "pydantic"
+
+
+def test_output_type_re_raises_non_pydantic_module_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_import_module = importlib.import_module
+
+    def _import_module(name: str, package: str | None = None) -> object:
+        if name == "pydantic":
+            raise ModuleNotFoundError("No module named 'pydantic_core'", name="pydantic_core")
+        return real_import_module(name, package)
+
+    monkeypatch.setattr(output_type_module.importlib, "import_module", _import_module)
+
+    with pytest.raises(ModuleNotFoundError) as error:
+        OutputTypeAdapter(output_type=_TypedPayload)
+
+    assert error.value.name == "pydantic_core"

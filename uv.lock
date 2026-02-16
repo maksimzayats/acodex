@@ -23,6 +23,11 @@ wheels = [
 name = "acodex"
 source = { editable = "." }
 
+[package.optional-dependencies]
+pydantic = [
+    { name = "pydantic", marker = "python_full_version < '3.15'" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "mypy" },
@@ -43,6 +48,8 @@ pydantic = [
 ]
 
 [package.metadata]
+requires-dist = [{ name = "pydantic", marker = "python_full_version < '3.15' and extra == 'pydantic'", specifier = ">=2" }]
+provides-extras = ["pydantic"]
 
 [package.metadata.requires-dev]
 dev = [

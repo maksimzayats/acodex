@@ -121,18 +121,24 @@ print(turn.structured_response["summary"])
 
 Typed validation with `output_type`:
 
+`output_type` requires the optional Pydantic extra:
+
+```bash
+pip install "acodex[pydantic]"
+```
+
 ```python
-from typing_extensions import TypedDict
+from pydantic import BaseModel
 
 from acodex import Codex
 
 
-class SummaryPayload(TypedDict):
+class SummaryPayload(BaseModel):
     summary: str
 
 
 turn = Codex().start_thread().run("Summarize repository status", output_type=SummaryPayload)
-print(turn.structured_response["summary"])
+print(turn.structured_response.summary)
 ```
 
 `CodexStructuredResponseError` is raised when structured parsing or validation fails:
