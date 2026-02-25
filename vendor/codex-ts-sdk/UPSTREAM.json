@@ -1,10 +1,10 @@
 {
-  "commit": "74d1f7b2b3af383bd3605344f3c842b194fd1d70",
+  "commit": "a7eda6a29b3ee25549f385197ff109508dc49a90",
   "path": "sdk/typescript",
-  "release_id": 287549221,
-  "release_published_at": "2026-02-18T07:12:45Z",
-  "release_tag": "rust-v0.104.0",
-  "release_url": "https://github.com/openai/codex/releases/tag/rust-v0.104.0",
+  "release_id": 290476287,
+  "release_published_at": "2026-02-25T17:21:45Z",
+  "release_tag": "rust-v0.105.0",
+  "release_url": "https://github.com/openai/codex/releases/tag/rust-v0.105.0",
   "repo": "https://github.com/openai/codex",
-  "tree_hash": "sha256:fe4f8bde20482b6f93139ab9f084f7463f4c23513eab6e3129792366765c7554"
+  "tree_hash": "sha256:a2cff9f0b154093087bafae273c10c784d121bf6adc8716a3c162d0649364f25"
 }
