@@ -51,7 +51,6 @@ class OutputTypeAdapter(Generic[T]):
 
         schema = self._adapter.json_schema()
         self._ensure_additional_properties_is_false(schema)
-
         return schema
 
     def validate_json(self, json_string: str | bytes | bytearray) -> T:

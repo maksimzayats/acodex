@@ -102,7 +102,7 @@ def test_json_schema_from_nested_output_type_sets_additional_properties_false_re
 
 
 @skip_output_type_tests_on_py315
-def test_json_schema_from_nested_output_type_replaces_refs() -> None:
+def test_json_schema_from_nested_output_type_preserves_refs() -> None:
     adapter: OutputTypeAdapter[_TypedCheckResult] = OutputTypeAdapter(
         output_type=_TypedCheckResult,
     )
@@ -110,8 +110,7 @@ def test_json_schema_from_nested_output_type_replaces_refs() -> None:
     schema = adapter.json_schema()
     assert schema is not None
 
-    for node in _iter_schema_nodes(schema):
-        assert "$ref" not in node
+    assert any("$ref" in node for node in _iter_schema_nodes(schema))
 
 
 @skip_output_type_tests_on_py315
@@ -269,48 +268,3 @@ def test_output_type_re_raises_non_pydantic_module_not_found(
         OutputTypeAdapter(output_type=_TypedPayload)
 
     assert error.value.name == "pydantic_core"
-
-
-@skip_output_type_tests_on_py315
-def test_json_schema_missing_jsonref_raises_structured_error_with_install_hint(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    real_import_module = importlib.import_module
-
-    def _import_module(name: str, package: str | None = None) -> object:
-        if name == "jsonref":
-            raise ModuleNotFoundError("No module named 'jsonref'", name="jsonref")
-        return real_import_module(name, package)
-
-    monkeypatch.setattr(output_type_module.importlib, "import_module", _import_module)
-    adapter: OutputTypeAdapter[_TypedPayload] = OutputTypeAdapter(output_type=_TypedPayload)
-
-    with pytest.raises(
-        CodexStructuredResponseError,
-        match='pip install "acodex\\[structured-output\\]"',
-    ) as error:
-        adapter.json_schema()
-
-    cause = error.value.__cause__
-    assert isinstance(cause, ModuleNotFoundError)
-    assert cause.name == "jsonref"
-
-
-@skip_output_type_tests_on_py315
-def test_json_schema_re_raises_non_jsonref_module_not_found(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    real_import_module = importlib.import_module
-
-    def _import_module(name: str, package: str | None = None) -> object:
-        if name == "jsonref":
-            raise ModuleNotFoundError("No module named 'jsonref'", name="some_other_dep")
-        return real_import_module(name, package)
-
-    monkeypatch.setattr(output_type_module.importlib, "import_module", _import_module)
-    adapter: OutputTypeAdapter[_TypedPayload] = OutputTypeAdapter(output_type=_TypedPayload)
-
-    with pytest.raises(ModuleNotFoundError) as error:
-        adapter.json_schema()
-
-    assert error.value.name == "some_other_dep"
