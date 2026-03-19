@@ -40,7 +40,7 @@ def test_exec_builder_allows_empty_input_string() -> None:
     assert command.argv[:2] == ["exec", "--experimental-json"]
 
 
-def test_exec_builder_sets_base_url_and_api_key_env() -> None:
+def test_exec_builder_serializes_base_url_and_sets_api_key_env() -> None:
     builder = CodexExecCLICommandBuilder(
         args=CodexExecArgs(input="hello", base_url="https://example.test", api_key="key-123"),
         env_overrides={},
@@ -48,7 +48,10 @@ def test_exec_builder_sets_base_url_and_api_key_env() -> None:
 
     command = builder.build_command()
 
-    assert command.env["OPENAI_BASE_URL"] == "https://example.test"
+    assert _collect_config_values(command.argv, "openai_base_url") == [
+        'openai_base_url="https://example.test"',
+    ]
+    assert "OPENAI_BASE_URL" not in command.env
     assert command.env["CODEX_API_KEY"] == "key-123"
 
 
@@ -290,6 +293,20 @@ def test_exec_builder_keeps_config_override_precedence_order() -> None:
     assert approval_policy_overrides == [
         'approval_policy="never"',
         'approval_policy="on-request"',
+    ]
+
+
+def test_exec_builder_base_url_override_wins_over_config_override() -> None:
+    builder = CodexExecCLICommandBuilder(
+        args=CodexExecArgs(input="hello world", base_url="https://example.test"),
+        config_overrides={"openai_base_url": "https://config.example.test"},
+    )
+
+    command = builder.build_command()
+
+    assert _collect_config_values(command.argv, "openai_base_url") == [
+        'openai_base_url="https://config.example.test"',
+        'openai_base_url="https://example.test"',
     ]
 
 

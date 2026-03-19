@@ -83,6 +83,7 @@ class CodexExecCLICommandBuilder:
 
         self._add_initial_command()
         self._add_config_overrides()
+        self._add_base_url()
         self._add_model()
         self._add_sandbox_mode()
         self._add_working_directory()
@@ -109,11 +110,6 @@ class CodexExecCLICommandBuilder:
 
     def _add_env(self) -> None:
         env = dict(self._env_overrides) if self._env_overrides is not None else dict(os.environ)
-
-        self._seen_args.add("base_url")
-        base_url = self._args.get("base_url")
-        if base_url:
-            env["OPENAI_BASE_URL"] = base_url
 
         self._seen_args.add("api_key")
         api_key = self._args.get("api_key")
@@ -145,6 +141,15 @@ class CodexExecCLICommandBuilder:
         for override in serialize_config_overrides(self._config_overrides):
             self._command.argv.append("--config")
             self._command.argv.append(override)
+
+    def _add_base_url(self) -> None:
+        self._seen_args.add("base_url")
+
+        base_url = self._args.get("base_url")
+        if not base_url:
+            return
+
+        self._append_config_override("openai_base_url", base_url)
 
     def _add_model(self) -> None:
         self._seen_args.add("model")
