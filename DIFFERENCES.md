@@ -14,6 +14,7 @@ intentional Python-specific adaptations.
 | return models are dataclasses | explicit value objects in Python | TS: `events.ts`, `items.ts`, `thread.ts`; Py: `src/acodex/types/*`; Tests: `tests/compatibility/test_ts_{events,items,thread_types}_compat.py` |
 | dual sync + async surfaces | common Python integration styles | Py: `src/acodex/{codex,thread}.py`; Tests: `tests/compatibility/test_ts_class_surface_compat.py` |
 | dedicated cancellation exception | clearer control flow | Py: `src/acodex/exceptions.py`; Tests: `tests/compatibility/test_ts_turn_options_compat.py`, `tests/unit/internal/test_process_runner.py` |
+| `CodexExecError` captures `stdout`/`stderr` | richer Python diagnostics for CLI failures | TS: `vendor/codex-ts-sdk/src/exec.ts`; Py: `src/acodex/exceptions.py`, `src/acodex/_internal/process_runner.py`; Tests: `tests/unit/internal/test_process_runner.py` |
 | CLI executable discovery via `PATH` | Python packaging constraints | TS: `codexOptions.ts`; Py: `src/acodex/exec.py`; Tests: `tests/compatibility/test_ts_codex_options_compat.py` |
 | narrower `output_schema` typing | stronger Python typing | TS: `turnOptions.ts`; Py: `src/acodex/types/turn_options.py`; Tests: `tests/compatibility/test_ts_turn_options_compat.py` |
 | streamed result exposes `streamed.result` | ergonomic post-stream access | Py: `src/acodex/types/turn.py`; Tests: `tests/compatibility/test_ts_thread_types_compat.py` |
@@ -208,7 +209,31 @@ Usage implication:
 
 - Ensure `codex` is installed and discoverable on `PATH`, or pass `codex_path_override`.
 
-## 8) Output schema typing is narrower in Python
+## 8) Exec failures expose captured process output in Python
+
+- TypeScript throws a generic `Error` string for CLI execution failures.
+- Python raises `CodexExecError` and stores captured `stdout` and `stderr` on the exception.
+
+References:
+
+- TS exec runner: `vendor/codex-ts-sdk/src/exec.ts`
+- Python exec exception: `src/acodex/exceptions.py`
+- Python process runners: `src/acodex/_internal/process_runner.py`
+- Tests: `tests/unit/internal/test_process_runner.py`
+
+Rationale:
+
+- Python callers often log or re-raise exceptions through frameworks that only preserve
+  `str(error)`. Including captured output directly in the exception message makes CLI failures much
+  easier to diagnose.
+- Keeping `stdout` and `stderr` as separate attributes still allows structured error handling.
+
+Usage implication:
+
+- Catch `CodexExecError` to inspect `error.stdout` and `error.stderr`, or rely on `str(error)` for a
+  combined diagnostic message.
+
+## 9) Output schema typing is narrower in Python
 
 - TypeScript: `TurnOptions.outputSchema?: unknown` (`vendor/codex-ts-sdk/src/turnOptions.ts`)
 - Python: `TurnOptions.output_schema: NotRequired[dict[str, JsonValue]]` (JSON-object shape),
@@ -224,7 +249,7 @@ Compatibility assertion:
 - Test: `tests/compatibility/test_ts_turn_options_compat.py` (accepts TS `unknown` as compatible with
   narrower Python typing)
 
-## 9) Streamed result exposes a completed turn property in Python
+## 10) Streamed result exposes a completed turn property in Python
 
 - TypeScript streamed flow returns events and leaves reduction to SDK internals in `run()`.
 - Python streamed result models expose `streamed.result` (sync and async) after the stream is fully
@@ -243,7 +268,7 @@ Usage implication:
 - Accessing `streamed.result` before full consumption raises
   `CodexThreadStreamNotConsumedError`.
 
-## 10) Python-only typed structured output (`output_type` + `structured_response`)
+## 11) Python-only typed structured output (`output_type` + `structured_response`)
 
 - TypeScript `Thread.run` / `runStreamed` expose `turnOptions.outputSchema` but do not expose a
   method-level typed output adapter argument.

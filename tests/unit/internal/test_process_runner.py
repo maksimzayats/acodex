@@ -7,10 +7,11 @@ import re
 import subprocess  # noqa: S404
 import sys
 import threading
+from collections import deque
 from collections.abc import Coroutine
 from pathlib import Path
 from textwrap import dedent
-from typing import Any, TypeVar, cast
+from typing import IO, Any, TypeVar, cast
 
 import pytest
 
@@ -35,6 +36,24 @@ def test_sync_stream_lines_yields_stdout_lines_without_newlines(tmp_path: Path) 
     assert lines == ["first line", "second line", "third line"]
 
 
+def test_sync_stream_lines_success_does_not_join_stderr_tail(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    executable = _create_fake_codex_executable(tmp_path)
+    runner = SyncCodexProcessRunner(executable_path=str(executable))
+    command = _build_command(mode="stdout_lines")
+
+    def fail_join(_: object) -> str:
+        raise AssertionError("stderr tail should not be joined on success")
+
+    monkeypatch.setattr(runner, "_join_sync_output_tail_chunks", fail_join)
+
+    lines = list(runner.stream_lines(command))
+
+    assert lines == ["first line", "second line", "third line"]
+
+
 def test_sync_nonzero_exit_raises_codex_exec_error_includes_stderr(tmp_path: Path) -> None:
     executable = _create_fake_codex_executable(tmp_path)
     runner = SyncCodexProcessRunner(executable_path=str(executable))
@@ -43,7 +62,9 @@ def test_sync_nonzero_exit_raises_codex_exec_error_includes_stderr(tmp_path: Pat
     with pytest.raises(CodexExecError, match=re.escape("Codex Exec exited with code 7")) as error:
         list(runner.stream_lines(command))
 
+    assert not error.value.stdout
     assert error.value.stderr == "stderr boom\n"
+    assert str(error.value) == "Codex Exec exited with code 7\n\nSTDERR:\nstderr boom"
 
 
 def test_sync_nonzero_exit_before_stdout_closes_raises_codex_exec_error(tmp_path: Path) -> None:
@@ -54,7 +75,11 @@ def test_sync_nonzero_exit_before_stdout_closes_raises_codex_exec_error(tmp_path
     with pytest.raises(CodexExecError, match=re.escape("Codex Exec exited with code 7")) as error:
         list(runner.stream_lines(command))
 
+    assert error.value.stdout == "late line\n"
     assert error.value.stderr == "stderr boom\n"
+    assert str(error.value) == (
+        "Codex Exec exited with code 7\n\nSTDOUT:\nlate line\n\nSTDERR:\nstderr boom"
+    )
 
 
 def test_sync_cancel_pre_set_raises_cancelled_without_spawning(tmp_path: Path) -> None:
@@ -156,10 +181,42 @@ def test_sync_terminate_process_falls_back_to_kill_after_timeouts() -> None:
     assert process.kill_called
 
 
+def test_sync_pump_stderr_keeps_only_tail_chunks() -> None:
+    chunks: deque[str] = deque(maxlen=2)
+
+    SyncCodexProcessRunner._pump_stderr(
+        cast("IO[str]", _ChunkedSyncStderr(["first", "second", "third"])),
+        chunks,
+    )
+
+    assert list(chunks) == ["second", "third"]
+
+
 def test_async_stream_lines_yields_stdout_lines_without_newlines(tmp_path: Path) -> None:
     executable = _create_fake_codex_executable(tmp_path)
     runner = AsyncCodexProcessRunner(executable_path=str(executable))
     command = _build_command(mode="stdout_lines")
+
+    async def run() -> list[str]:
+        return [line async for line in runner.stream_lines(command)]
+
+    lines = _run_async(run())
+
+    assert lines == ["first line", "second line", "third line"]
+
+
+def test_async_stream_lines_success_does_not_join_stderr_tail(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    executable = _create_fake_codex_executable(tmp_path)
+    runner = AsyncCodexProcessRunner(executable_path=str(executable))
+    command = _build_command(mode="stdout_lines")
+
+    def fail_join(_: object) -> str:
+        raise AssertionError("stderr tail should not be joined on success")
+
+    monkeypatch.setattr(runner, "_join_async_output_tail_chunks", fail_join)
 
     async def run() -> list[str]:
         return [line async for line in runner.stream_lines(command)]
@@ -207,7 +264,9 @@ def test_async_nonzero_exit_raises_codex_exec_error_includes_stderr(tmp_path: Pa
     with pytest.raises(CodexExecError, match=re.escape("Codex Exec exited with code 7")) as error:
         _run_async(run())
 
+    assert not error.value.stdout
     assert error.value.stderr == "stderr boom\n"
+    assert str(error.value) == "Codex Exec exited with code 7\n\nSTDERR:\nstderr boom"
 
 
 def test_async_nonzero_exit_before_stdout_closes_raises_codex_exec_error(tmp_path: Path) -> None:
@@ -222,7 +281,11 @@ def test_async_nonzero_exit_before_stdout_closes_raises_codex_exec_error(tmp_pat
     with pytest.raises(CodexExecError, match=re.escape("Codex Exec exited with code 7")) as error:
         _run_async(asyncio.wait_for(run(), timeout=2.0))
 
+    assert error.value.stdout == "late line\n"
     assert error.value.stderr == "stderr boom\n"
+    assert str(error.value) == (
+        "Codex Exec exited with code 7\n\nSTDOUT:\nlate line\n\nSTDERR:\nstderr boom"
+    )
 
 
 def test_async_cancel_pre_set_raises_cancelled_without_spawning(tmp_path: Path) -> None:
@@ -412,14 +475,14 @@ def test_async_cleanup_closes_stdin_and_cancels_stderr_task(
 ) -> None:
     runner = AsyncCodexProcessRunner(executable_path="codex")
     stdin = _FakeAsyncStdin()
-    stderr_task: asyncio.Task[bytes] | None = None
+    stderr_task: asyncio.Task[None] | None = None
 
     async def fake_terminate(_: object) -> None:
         await asyncio.sleep(0)
 
     async def run() -> None:
         nonlocal stderr_task
-        stderr_task = asyncio.create_task(asyncio.sleep(10.0, result=b"stderr"))
+        stderr_task = asyncio.create_task(asyncio.sleep(10.0))
         monkeypatch.setattr(runner, "_terminate_process", fake_terminate)
         await runner._cleanup(
             process=cast("asyncio.subprocess.Process", _FakeAsyncProcess()),
@@ -446,6 +509,22 @@ def test_async_read_next_chunk_returns_cancelled_when_signal_task_finishes_first
     )
 
     assert result is _ASYNC_CANCELLED
+
+
+def test_async_capture_stderr_tail_keeps_only_tail_chunks() -> None:
+    chunks: deque[bytes] = deque(maxlen=2)
+
+    _run_async(
+        AsyncCodexProcessRunner._capture_stderr_tail(
+            stderr=cast(
+                "asyncio.StreamReader",
+                _ChunkedAsyncStderr([b"first", b"second", b"third"]),
+            ),
+            chunks=chunks,
+        ),
+    )
+
+    assert list(chunks) == [b"second", b"third"]
 
 
 def _build_command(
@@ -586,6 +665,17 @@ class _KillFallbackSyncProcess:
         self.kill_called = True
 
 
+class _ChunkedSyncStderr:
+    def __init__(self, chunks: list[str]) -> None:
+        self._chunks = [*chunks, ""]
+        self._chunk_index = 0
+
+    def read(self, _: int = -1) -> str:
+        chunk = self._chunks[self._chunk_index]
+        self._chunk_index += 1
+        return chunk
+
+
 class _MissingAsyncStdioProcess:
     stdin: None = None
     stdout: None = None
@@ -640,6 +730,17 @@ class _ImmediateAsyncStdout:
     async def read(self, _: int = -1) -> bytes:
         self._read_calls += 1
         return b"ready\n"
+
+
+class _ChunkedAsyncStderr:
+    def __init__(self, chunks: list[bytes]) -> None:
+        self._chunks = [*chunks, b""]
+        self._chunk_index = 0
+
+    async def read(self, _: int = -1) -> bytes:
+        chunk = self._chunks[self._chunk_index]
+        self._chunk_index += 1
+        return chunk
 
 
 class _UnusedAsyncStdout:
