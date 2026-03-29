@@ -175,6 +175,32 @@ def test_async_stream_lines_yields_stdout_lines_without_newlines(tmp_path: Path)
     assert lines == ["first line", "second line", "third line"]
 
 
+def test_async_stream_lines_handles_oversized_stdout_lines(tmp_path: Path) -> None:
+    executable = _create_fake_codex_executable(tmp_path)
+    runner = AsyncCodexProcessRunner(executable_path=str(executable))
+    command = _build_command(mode="oversized_line")
+
+    async def run() -> list[str]:
+        return [line async for line in runner.stream_lines(command)]
+
+    lines = _run_async(run())
+
+    assert lines == ["x" * 70000, "tail"]
+
+
+def test_async_stream_lines_yields_final_line_without_trailing_newline(tmp_path: Path) -> None:
+    executable = _create_fake_codex_executable(tmp_path)
+    runner = AsyncCodexProcessRunner(executable_path=str(executable))
+    command = _build_command(mode="stdout_without_trailing_newline")
+
+    async def run() -> list[str]:
+        return [line async for line in runner.stream_lines(command)]
+
+    lines = _run_async(run())
+
+    assert lines == ["tail without newline"]
+
+
 def test_async_nonzero_exit_raises_codex_exec_error_includes_stderr(tmp_path: Path) -> None:
     executable = _create_fake_codex_executable(tmp_path)
     runner = AsyncCodexProcessRunner(executable_path=str(executable))
@@ -346,7 +372,7 @@ def test_async_stream_lines_create_task_failure_terminates_and_closes_stdin(
     assert stdin.close_called
 
 
-def test_async_cancel_during_readline_uses_async_event_wait_path(tmp_path: Path) -> None:
+def test_async_cancel_during_stdout_read_uses_async_event_wait_path(tmp_path: Path) -> None:
     executable = _create_fake_codex_executable(tmp_path)
     runner = AsyncCodexProcessRunner(executable_path=str(executable))
 
@@ -421,7 +447,7 @@ def test_async_cleanup_closes_stdin_and_cancels_stderr_task(
     assert stderr_task.cancelled()
 
 
-def test_async_read_next_line_returns_cancelled_when_signal_task_finishes_first() -> None:
+def test_async_read_next_chunk_returns_cancelled_when_signal_task_finishes_first() -> None:
     runner = AsyncCodexProcessRunner(executable_path="codex")
     signal = asyncio.Event()
     signal.set()
@@ -429,7 +455,7 @@ def test_async_read_next_line_returns_cancelled_when_signal_task_finishes_first(
     stdout = _ImmediateAsyncStdout()
 
     result = _run_async(
-        runner._read_next_line(command=command, stdout=cast("asyncio.StreamReader", stdout)),
+        runner._read_next_chunk(command=command, stdout=cast("asyncio.StreamReader", stdout)),
     )
 
     assert result is _ASYNC_CANCELLED
@@ -476,6 +502,16 @@ def _create_fake_codex_executable(tmp_path: Path) -> Path:
 
             if mode == "stdout_lines":
                 sys.stdout.write("first line\\r\\nsecond line\\nthird line\\r\\n")
+                sys.stdout.flush()
+                raise SystemExit(0)
+
+            if mode == "oversized_line":
+                sys.stdout.write("x" * 70000 + "\\n" + "tail\\n")
+                sys.stdout.flush()
+                raise SystemExit(0)
+
+            if mode == "stdout_without_trailing_newline":
+                sys.stdout.write("tail without newline")
                 sys.stdout.flush()
                 raise SystemExit(0)
 
@@ -596,23 +632,25 @@ class _FakeAsyncStdin:
 
 class _DelayedAsyncStdout:
     def __init__(self) -> None:
-        self._read_calls = 0
+        self._delay_done = False
+        self._chunks = [b"eventual ", b"line\n", b""]
+        self._chunk_index = 0
 
-    async def readline(self) -> bytes:
-        self._read_calls += 1
-        if self._read_calls == 1:
+    async def read(self, _: int = -1) -> bytes:
+        if not self._delay_done:
+            self._delay_done = True
             await asyncio.sleep(0.01)
-            return b"delayed line\n"
-        if self._read_calls == 2:
-            return b"eventual line\n"
-        return b""
+
+        chunk = self._chunks[self._chunk_index]
+        self._chunk_index += 1
+        return chunk
 
 
 class _ImmediateAsyncStdout:
     def __init__(self) -> None:
         self._read_calls = 0
 
-    async def readline(self) -> bytes:
+    async def read(self, _: int = -1) -> bytes:
         self._read_calls += 1
         return b"ready\n"
 
@@ -621,7 +659,7 @@ class _UnusedAsyncStdout:
     def __init__(self) -> None:
         self.read_calls = 0
 
-    async def readline(self) -> bytes:
+    async def read(self, _: int = -1) -> bytes:
         self.read_calls += 1
         return b""
 
