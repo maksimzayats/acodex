@@ -8,7 +8,8 @@ testing standards. Prefer uv for all tooling.
 - Install deps (dev): `uv sync --group dev`
 - Format: `make format`
 - Lint (all): `make lint`
-- Test (all): `make test`
+- Test (CI-safe default): `make test`
+- Test (real Codex integration, opt-in): `ACODEX_RUN_REAL_INTEGRATION=1 make test-real-integration`
 
 ## Build
 
@@ -25,12 +26,15 @@ testing standards. Prefer uv for all tooling.
 
 ## Tests
 
-- Run all tests (coverage): `make test`
+- Run the default CI-safe test suite (coverage): `make test`
+- Run the paid real Codex integration suite locally: `ACODEX_RUN_REAL_INTEGRATION=1 make test-real-integration`
 - Run a single test file: `uv run pytest tests/test_some.py`
 - Run a single test: `uv run pytest tests/test_some.:test_some`
 - Run tests with keyword filter: `uv run pytest -k "dependency" tests/`
 - Coverage (recommended for new work):
   `uv run pytest tests/ --cov=src/acodex --cov-report=term-missing`
+- Real integration tests are excluded from `make test` and all GitHub CI runs.
+- `ACODEX_REAL_MODEL` defaults to `gpt-5.3-codex` and can be overridden for local runs.
 
 ## Repo structure
 
@@ -92,6 +96,8 @@ testing standards. Prefer uv for all tooling.
 - Always ensure linting and type-checking run clean with no errors.
 - Every new change must preserve 100% test coverage.
 - After making changes, always run `make lint` and `make test` and report results.
+- For SDK integration changes, also run `ACODEX_RUN_REAL_INTEGRATION=1 make test-real-integration`
+  locally when a live Codex setup is available.
 
 ## Ruff configuration highlights
 

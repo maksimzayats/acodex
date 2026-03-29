@@ -106,6 +106,9 @@ addopts = [
     "--strict-markers",
     "--strict-config",
 ]
+markers = [
+    "real_integration: opt-in tests that exercise a live local Codex CLI setup",
+]
 filterwarnings = [
     "error",
     # Ignore ResourceWarnings from unclosed sockets/event loops during GC
