@@ -43,7 +43,9 @@ def test_sync_nonzero_exit_raises_codex_exec_error_includes_stderr(tmp_path: Pat
     with pytest.raises(CodexExecError, match=re.escape("Codex Exec exited with code 7")) as error:
         list(runner.stream_lines(command))
 
+    assert not error.value.stdout
     assert error.value.stderr == "stderr boom\n"
+    assert str(error.value) == "Codex Exec exited with code 7\n\nSTDERR:\nstderr boom"
 
 
 def test_sync_nonzero_exit_before_stdout_closes_raises_codex_exec_error(tmp_path: Path) -> None:
@@ -54,7 +56,11 @@ def test_sync_nonzero_exit_before_stdout_closes_raises_codex_exec_error(tmp_path
     with pytest.raises(CodexExecError, match=re.escape("Codex Exec exited with code 7")) as error:
         list(runner.stream_lines(command))
 
+    assert error.value.stdout == "late line\n"
     assert error.value.stderr == "stderr boom\n"
+    assert str(error.value) == (
+        "Codex Exec exited with code 7\n\nSTDOUT:\nlate line\n\nSTDERR:\nstderr boom"
+    )
 
 
 def test_sync_cancel_pre_set_raises_cancelled_without_spawning(tmp_path: Path) -> None:
@@ -181,7 +187,9 @@ def test_async_nonzero_exit_raises_codex_exec_error_includes_stderr(tmp_path: Pa
     with pytest.raises(CodexExecError, match=re.escape("Codex Exec exited with code 7")) as error:
         _run_async(run())
 
+    assert not error.value.stdout
     assert error.value.stderr == "stderr boom\n"
+    assert str(error.value) == "Codex Exec exited with code 7\n\nSTDERR:\nstderr boom"
 
 
 def test_async_nonzero_exit_before_stdout_closes_raises_codex_exec_error(tmp_path: Path) -> None:
@@ -196,7 +204,11 @@ def test_async_nonzero_exit_before_stdout_closes_raises_codex_exec_error(tmp_pat
     with pytest.raises(CodexExecError, match=re.escape("Codex Exec exited with code 7")) as error:
         _run_async(asyncio.wait_for(run(), timeout=2.0))
 
+    assert error.value.stdout == "late line\n"
     assert error.value.stderr == "stderr boom\n"
+    assert str(error.value) == (
+        "Codex Exec exited with code 7\n\nSTDOUT:\nlate line\n\nSTDERR:\nstderr boom"
+    )
 
 
 def test_async_cancel_pre_set_raises_cancelled_without_spawning(tmp_path: Path) -> None:
@@ -372,6 +384,7 @@ def test_async_read_timeout_path_returns_timeout_then_eventually_yields(
             async for line in runner._iter_stdout_lines(
                 command=command,
                 stdout=cast("asyncio.StreamReader", stdout),
+                stdout_chunks=[],
             )
         ]
 

@@ -18,6 +18,15 @@ If you see ``CodexExecutableNotFoundError``:
 - Ensure the Codex CLI is installed and ``codex`` is on ``PATH``.
 - Or pass ``codex_path_override="/path/to/codex"`` to ``Codex(...)`` / ``AsyncCodex(...)``.
 
+Executable exits with a non-zero code
+-------------------------------------
+
+If you see ``CodexExecError``:
+
+- The exception message now includes captured ``STDOUT`` and ``STDERR`` sections when available.
+- You can also inspect ``error.stdout`` and ``error.stderr`` directly when logging or re-raising.
+- This is the fastest way to see why the underlying ``codex`` process failed.
+
 Structured output errors
 ------------------------
 

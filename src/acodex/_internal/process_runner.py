@@ -77,8 +77,12 @@ class CodexProcessRunnerBase(ABC):
             raise CodexCancelledError("Turn cancelled")
 
     @staticmethod
-    def _raise_exec_error(*, detail: str, stderr: str) -> NoReturn:
-        raise CodexExecError(f"Codex Exec exited with {detail}", stderr=stderr)
+    def _raise_exec_error(*, detail: str, stdout: str, stderr: str) -> NoReturn:
+        raise CodexExecError(
+            f"Codex Exec exited with {detail}",
+            stdout=stdout,
+            stderr=stderr,
+        )
 
     @abstractmethod
     def stream_lines(self, command: CodexExecCommand) -> Iterator[str] | AsyncIterator[str]:
@@ -93,11 +97,13 @@ class SyncCodexProcessRunner(CodexProcessRunnerBase):
         stdio = self._require_stdio(process)
 
         stdout_queue: queue.Queue[_StdoutQueueItem] = queue.Queue()
+        stdout_chunks: list[str] = []
         stderr_chunks: list[str] = []
         reader_threads = self._start_reader_threads(
             stdout=stdio.stdout,
             stderr=stdio.stderr,
             stdout_queue=stdout_queue,
+            stdout_chunks=stdout_chunks,
             stderr_chunks=stderr_chunks,
         )
         resources = _SyncResources(
@@ -117,9 +123,15 @@ class SyncCodexProcessRunner(CodexProcessRunnerBase):
                 stdout_thread=reader_threads.stdout_thread,
             )
             return_code = process.wait()
+            reader_threads.stdout_thread.join()
             reader_threads.stderr_thread.join()
+            stdout_text = "".join(stdout_chunks)
             stderr_text = "".join(stderr_chunks)
-            self._raise_on_bad_exit(return_code=return_code, stderr=stderr_text)
+            self._raise_on_bad_exit(
+                return_code=return_code,
+                stdout=stdout_text,
+                stderr=stderr_text,
+            )
         except CodexCancelledError:
             self._terminate_process(process)
             raise
@@ -140,7 +152,7 @@ class SyncCodexProcessRunner(CodexProcessRunnerBase):
                 bufsize=1,
             )
         except OSError as error:
-            self._raise_exec_error(detail=f"spawn failure: {error}", stderr="")
+            self._raise_exec_error(detail=f"spawn failure: {error}", stdout="", stderr="")
 
     def _require_stdio(self, process: subprocess.Popen[str]) -> _SyncStdio:
         stdin = process.stdin
@@ -148,7 +160,11 @@ class SyncCodexProcessRunner(CodexProcessRunnerBase):
         stderr = process.stderr
         if stdin is None or stdout is None or stderr is None:
             self._terminate_process(process)
-            self._raise_exec_error(detail="spawn failure: missing stdio streams", stderr="")
+            self._raise_exec_error(
+                detail="spawn failure: missing stdio streams",
+                stdout="",
+                stderr="",
+            )
 
         return _SyncStdio(stdin=stdin, stdout=stdout, stderr=stderr)
 
@@ -158,11 +174,16 @@ class SyncCodexProcessRunner(CodexProcessRunnerBase):
         stdout: IO[str],
         stderr: IO[str],
         stdout_queue: queue.Queue[_StdoutQueueItem],
+        stdout_chunks: list[str],
         stderr_chunks: list[str],
     ) -> _SyncReaderThreads:
         stdout_thread = threading.Thread(
             target=self._pump_stdout,
-            args=(stdout, stdout_queue),
+            args=(stdout,),
+            kwargs={
+                "output": stdout_queue,
+                "chunks": stdout_chunks,
+            },
             name="acodex-sync-stdout-reader",
             daemon=True,
         )
@@ -208,9 +229,9 @@ class SyncCodexProcessRunner(CodexProcessRunnerBase):
             yield cast("str", item).rstrip("\r\n")
 
     @classmethod
-    def _raise_on_bad_exit(cls, *, return_code: int, stderr: str) -> None:
+    def _raise_on_bad_exit(cls, *, return_code: int, stdout: str, stderr: str) -> None:
         if return_code != 0:
-            cls._raise_exec_error(detail=f"code {return_code}", stderr=stderr)
+            cls._raise_exec_error(detail=f"code {return_code}", stdout=stdout, stderr=stderr)
 
     def _cleanup(self, *, process: subprocess.Popen[str], resources: _SyncResources) -> None:
         self._terminate_process(process)
@@ -224,9 +245,15 @@ class SyncCodexProcessRunner(CodexProcessRunnerBase):
         resources.stderr_thread.join()
 
     @staticmethod
-    def _pump_stdout(stream: IO[str], output: queue.Queue[_StdoutQueueItem]) -> None:
+    def _pump_stdout(
+        stream: IO[str],
+        *,
+        output: queue.Queue[_StdoutQueueItem],
+        chunks: list[str],
+    ) -> None:
         try:
             for line in stream:
+                chunks.append(line)
                 output.put(line)
         finally:
             output.put(_STDOUT_EOF)
@@ -262,6 +289,7 @@ class AsyncCodexProcessRunner(CodexProcessRunnerBase):
         process = await self._spawn_process(command)
         stdio: _AsyncStdio | None = None
         stderr_task: asyncio.Task[bytes] | None = None
+        stdout_chunks: list[str] = []
 
         try:
             stdio = self._require_stdio(process)
@@ -271,13 +299,22 @@ class AsyncCodexProcessRunner(CodexProcessRunnerBase):
             )
 
             await self._write_stdin(stdin=stdio.stdin, stdin_text=command.stdin)
-            async for line in self._iter_stdout_lines(command=command, stdout=stdio.stdout):
+            async for line in self._iter_stdout_lines(
+                command=command,
+                stdout=stdio.stdout,
+                stdout_chunks=stdout_chunks,
+            ):
                 yield line
 
             return_code = await process.wait()
+            stdout_text = "".join(stdout_chunks)
             stderr_text = await self._decode_stderr(stderr_task)
 
-            self._raise_on_bad_exit(return_code=return_code, stderr=stderr_text)
+            self._raise_on_bad_exit(
+                return_code=return_code,
+                stdout=stdout_text,
+                stderr=stderr_text,
+            )
         except CodexCancelledError:
             await self._terminate_process(process)
             raise
@@ -299,7 +336,7 @@ class AsyncCodexProcessRunner(CodexProcessRunnerBase):
                 stderr=subprocess.PIPE,
             )
         except OSError as error:
-            self._raise_exec_error(detail=f"spawn failure: {error}", stderr="")
+            self._raise_exec_error(detail=f"spawn failure: {error}", stdout="", stderr="")
 
     async def _cleanup(
         self,
@@ -332,6 +369,7 @@ class AsyncCodexProcessRunner(CodexProcessRunnerBase):
         if stdin is None or stdout is None or stderr is None:
             raise CodexExecError(
                 "Codex Exec exited with spawn failure: missing stdio streams",
+                stdout="",
                 stderr="",
             )
 
@@ -351,6 +389,7 @@ class AsyncCodexProcessRunner(CodexProcessRunnerBase):
         *,
         command: CodexExecCommand,
         stdout: asyncio.StreamReader,
+        stdout_chunks: list[str],
     ) -> AsyncIterator[str]:
         while True:
             self._check_cancelled(command)
@@ -363,7 +402,9 @@ class AsyncCodexProcessRunner(CodexProcessRunnerBase):
             if line == b"":
                 return
 
-            yield cast("bytes", line).decode("utf-8", errors="replace").rstrip("\r\n")
+            decoded_line = cast("bytes", line).decode("utf-8", errors="replace")
+            stdout_chunks.append(decoded_line)
+            yield decoded_line.rstrip("\r\n")
 
     @staticmethod
     async def _read_next_line(
@@ -408,9 +449,9 @@ class AsyncCodexProcessRunner(CodexProcessRunnerBase):
         raise CodexCancelledError("Turn cancelled")
 
     @classmethod
-    def _raise_on_bad_exit(cls, *, return_code: int, stderr: str) -> None:
+    def _raise_on_bad_exit(cls, *, return_code: int, stdout: str, stderr: str) -> None:
         if return_code != 0:
-            cls._raise_exec_error(detail=f"code {return_code}", stderr=stderr)
+            cls._raise_exec_error(detail=f"code {return_code}", stdout=stdout, stderr=stderr)
 
     @staticmethod
     async def _decode_stderr(stderr_task: asyncio.Task[bytes]) -> str:

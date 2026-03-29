@@ -10,10 +10,20 @@ class CodexCancelledError(CodexError):
 
 
 class CodexExecError(CodexError):
-    """Raised when the codex executable fails to start or exits unsuccessfully."""
+    """Raised when the codex executable fails to start or exits unsuccessfully.
 
-    def __init__(self, message: str, *, stderr: str | None = None) -> None:
-        super().__init__(message)
+    Captured process output is available on ``stdout`` and ``stderr`` when present.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        stdout: str | None = None,
+        stderr: str | None = None,
+    ) -> None:
+        super().__init__(_format_exec_error_message(message, stdout=stdout, stderr=stderr))
+        self.stdout = stdout
         self.stderr = stderr
 
 
@@ -52,3 +62,33 @@ class CodexOutputSchemaError(CodexError):
 
 class CodexInternalError(CodexError):
     """Raised when an internal invariant is violated, indicating a bug in acodex."""
+
+
+def _format_exec_error_message(
+    message: str,
+    *,
+    stdout: str | None,
+    stderr: str | None,
+) -> str:
+    sections = [message]
+
+    normalized_stdout = _normalize_exec_output(stdout)
+    if normalized_stdout is not None:
+        sections.extend(("", "STDOUT:", normalized_stdout))
+
+    normalized_stderr = _normalize_exec_output(stderr)
+    if normalized_stderr is not None:
+        sections.extend(("", "STDERR:", normalized_stderr))
+
+    return "\n".join(sections)
+
+
+def _normalize_exec_output(output: str | None) -> str | None:
+    if output is None:
+        return None
+
+    normalized_output = output.rstrip("\r\n")
+    if not normalized_output:
+        return None
+
+    return normalized_output
