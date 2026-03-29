@@ -33,6 +33,17 @@ Tests (coverage must stay at 100%):
 make test
 ```
 
+`make test` is CI-safe and excludes the paid opt-in real Codex integration suite.
+
+Run the real SDK integration suite locally only when you explicitly want to exercise a live Codex
+setup:
+
+```bash
+ACODEX_RUN_REAL_INTEGRATION=1 make test-real-integration
+```
+
+`ACODEX_REAL_MODEL` defaults to `gpt-5.3-codex` and can be overridden for local runs.
+
 Docs:
 
 ```bash

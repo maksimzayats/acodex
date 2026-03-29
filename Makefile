@@ -1,4 +1,4 @@
-.PHONY: format lint test docs vendor-ts-sdk vendor-ts-sdk-latest
+.PHONY: format lint test test-real-integration docs vendor-ts-sdk vendor-ts-sdk-latest
 
 format:
 	uv run ruff format .
@@ -10,7 +10,10 @@ lint:
 	uv run mypy .
 
 test:
-	uv run pytest tests/ --cov=src/acodex --cov-report=term-missing
+	uv run pytest -m "not real_integration" tests/ --cov=src/acodex --cov-report=term-missing
+
+test-real-integration:
+	ACODEX_RUN_REAL_INTEGRATION=1 uv run pytest -m "real_integration" tests/integration/
 
 docs:
 	rm -rf docs/_build
