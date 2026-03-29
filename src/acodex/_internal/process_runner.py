@@ -15,6 +15,7 @@ from acodex.exceptions import CodexCancelledError, CodexExecError
 
 _READ_POLL_INTERVAL_SECONDS: Final[float] = 0.05
 _PROCESS_TERMINATE_TIMEOUT_SECONDS: Final[float] = 1.0
+_ASYNC_STDOUT_READ_CHUNK_BYTES: Final[int] = 64 * 1024
 
 
 class _StdoutEofSentinel:
@@ -352,37 +353,55 @@ class AsyncCodexProcessRunner(CodexProcessRunnerBase):
         command: CodexExecCommand,
         stdout: asyncio.StreamReader,
     ) -> AsyncIterator[str]:
+        buffer = bytearray()
         while True:
             self._check_cancelled(command)
 
-            line = await self._read_next_line(command=command, stdout=stdout)
-            if line is _ASYNC_TIMEOUT:
+            buffered_line = self._pop_buffered_line(buffer)
+            if buffered_line is not None:
+                yield buffered_line.decode("utf-8", errors="replace").rstrip("\r\n")
                 continue
-            if line is _ASYNC_CANCELLED:
+
+            chunk = await self._read_next_chunk(command=command, stdout=stdout)
+            if chunk is _ASYNC_TIMEOUT:
+                continue
+            if chunk is _ASYNC_CANCELLED:
                 self._raise_cancelled()
-            if line == b"":
+            if chunk == b"":
+                if buffer:
+                    yield bytes(buffer).decode("utf-8", errors="replace").rstrip("\r\n")
                 return
 
-            yield cast("bytes", line).decode("utf-8", errors="replace").rstrip("\r\n")
+            buffer.extend(cast("bytes", chunk))
 
     @staticmethod
-    async def _read_next_line(
+    def _pop_buffered_line(buffer: bytearray) -> bytes | None:
+        newline_index = buffer.find(b"\n")
+        if newline_index == -1:
+            return None
+
+        line = bytes(buffer[: newline_index + 1])
+        del buffer[: newline_index + 1]
+        return line
+
+    @staticmethod
+    async def _read_next_chunk(
         *,
         command: CodexExecCommand,
         stdout: asyncio.StreamReader,
     ) -> _AsyncReadResult:
         signal = command.signal
         if isinstance(signal, asyncio.Event):
-            readline_task = asyncio.create_task(
-                stdout.readline(),
-                name="acodex-async-stdout-readline",
+            read_task = asyncio.create_task(
+                stdout.read(_ASYNC_STDOUT_READ_CHUNK_BYTES),
+                name="acodex-async-stdout-read",
             )
             cancelled_task = asyncio.create_task(
                 signal.wait(),
                 name="acodex-async-cancel-wait",
             )
             done, pending = await asyncio.wait(
-                {readline_task, cancelled_task},
+                {read_task, cancelled_task},
                 return_when=asyncio.FIRST_COMPLETED,
             )
             for task in pending:
@@ -393,11 +412,11 @@ class AsyncCodexProcessRunner(CodexProcessRunnerBase):
             if cancelled_task in done:
                 return _ASYNC_CANCELLED
 
-            return readline_task.result()
+            return read_task.result()
 
         try:
             return await asyncio.wait_for(
-                stdout.readline(),
+                stdout.read(_ASYNC_STDOUT_READ_CHUNK_BYTES),
                 timeout=_READ_POLL_INTERVAL_SECONDS,
             )
         except asyncio.TimeoutError:
