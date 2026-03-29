@@ -5,6 +5,7 @@ import queue
 import subprocess  # noqa: S404
 import threading
 from abc import ABC, abstractmethod
+from collections import deque
 from collections.abc import AsyncIterator, Iterator
 from contextlib import suppress
 from dataclasses import dataclass
@@ -16,6 +17,9 @@ from acodex.exceptions import CodexCancelledError, CodexExecError
 _READ_POLL_INTERVAL_SECONDS: Final[float] = 0.05
 _PROCESS_TERMINATE_TIMEOUT_SECONDS: Final[float] = 1.0
 _ASYNC_STDOUT_READ_CHUNK_BYTES: Final[int] = 64 * 1024
+_STDERR_TAIL_CHUNK_COUNT: Final[int] = 256
+_SYNC_STDERR_READ_CHUNK_CHARS: Final[int] = 4 * 1024
+_ASYNC_STDERR_READ_CHUNK_BYTES: Final[int] = 4 * 1024
 
 
 class _StdoutEofSentinel:
@@ -36,6 +40,8 @@ _ASYNC_CANCELLED: Final[_AsyncCancelledSentinel] = _AsyncCancelledSentinel()
 
 _StdoutQueueItem: TypeAlias = str | _StdoutEofSentinel
 _AsyncReadResult: TypeAlias = bytes | _AsyncTimeoutSentinel | _AsyncCancelledSentinel
+_SyncOutputTailChunks: TypeAlias = deque[str]
+_AsyncOutputTailChunks: TypeAlias = deque[bytes]
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +75,22 @@ class CodexProcessRunnerBase(ABC):
         self._executable_path: Final[str] = executable_path
 
     @staticmethod
+    def _new_sync_output_tail_chunks() -> _SyncOutputTailChunks:
+        return deque(maxlen=_STDERR_TAIL_CHUNK_COUNT)
+
+    @staticmethod
+    def _join_sync_output_tail_chunks(chunks: _SyncOutputTailChunks) -> str:
+        return "".join(chunks)
+
+    @staticmethod
+    def _new_async_output_tail_chunks() -> _AsyncOutputTailChunks:
+        return deque(maxlen=_STDERR_TAIL_CHUNK_COUNT)
+
+    @staticmethod
+    def _join_async_output_tail_chunks(chunks: _AsyncOutputTailChunks) -> str:
+        return b"".join(chunks).decode("utf-8", errors="replace")
+
+    @staticmethod
     def _check_cancelled(command: CodexExecCommand) -> None:
         signal = command.signal
         if signal is None:
@@ -98,8 +120,8 @@ class SyncCodexProcessRunner(CodexProcessRunnerBase):
         stdio = self._require_stdio(process)
 
         stdout_queue: queue.Queue[_StdoutQueueItem] = queue.Queue()
-        stdout_chunks: list[str] = []
-        stderr_chunks: list[str] = []
+        stdout_chunks = self._new_sync_output_tail_chunks()
+        stderr_chunks = self._new_sync_output_tail_chunks()
         reader_threads = self._start_reader_threads(
             stdout=stdio.stdout,
             stderr=stdio.stderr,
@@ -126,13 +148,12 @@ class SyncCodexProcessRunner(CodexProcessRunnerBase):
             return_code = process.wait()
             reader_threads.stdout_thread.join()
             reader_threads.stderr_thread.join()
-            stdout_text = "".join(stdout_chunks)
-            stderr_text = "".join(stderr_chunks)
-            self._raise_on_bad_exit(
-                return_code=return_code,
-                stdout=stdout_text,
-                stderr=stderr_text,
-            )
+            stdout_text = ""
+            stderr_text = ""
+            if return_code != 0:
+                stdout_text = self._join_sync_output_tail_chunks(stdout_chunks)
+                stderr_text = self._join_sync_output_tail_chunks(stderr_chunks)
+            self._raise_on_bad_exit(return_code=return_code, stdout=stdout_text, stderr=stderr_text)
         except CodexCancelledError:
             self._terminate_process(process)
             raise
@@ -175,8 +196,8 @@ class SyncCodexProcessRunner(CodexProcessRunnerBase):
         stdout: IO[str],
         stderr: IO[str],
         stdout_queue: queue.Queue[_StdoutQueueItem],
-        stdout_chunks: list[str],
-        stderr_chunks: list[str],
+        stdout_chunks: _SyncOutputTailChunks,
+        stderr_chunks: _SyncOutputTailChunks,
     ) -> _SyncReaderThreads:
         stdout_thread = threading.Thread(
             target=self._pump_stdout,
@@ -250,7 +271,7 @@ class SyncCodexProcessRunner(CodexProcessRunnerBase):
         stream: IO[str],
         *,
         output: queue.Queue[_StdoutQueueItem],
-        chunks: list[str],
+        chunks: _SyncOutputTailChunks,
     ) -> None:
         try:
             for line in stream:
@@ -260,8 +281,12 @@ class SyncCodexProcessRunner(CodexProcessRunnerBase):
             output.put(_STDOUT_EOF)
 
     @staticmethod
-    def _pump_stderr(stream: IO[str], chunks: list[str]) -> None:
-        chunks.append(stream.read())
+    def _pump_stderr(stream: IO[str], chunks: _SyncOutputTailChunks) -> None:
+        while True:
+            chunk = stream.read(_SYNC_STDERR_READ_CHUNK_CHARS)
+            if not chunk:
+                return
+            chunks.append(chunk)
 
     @staticmethod
     def _terminate_process(process: subprocess.Popen[str]) -> None:
@@ -289,15 +314,17 @@ class AsyncCodexProcessRunner(CodexProcessRunnerBase):
 
         process = await self._spawn_process(command)
         stdio: _AsyncStdio | None = None
-        stderr_task: asyncio.Task[bytes] | None = None
-        stdout_chunks: list[bytes] = []
+        stdout_chunks = self._new_async_output_tail_chunks()
+        stderr_chunks = self._new_async_output_tail_chunks()
+        cleanup_stderr_task: asyncio.Task[None] | None = None
 
         try:
             stdio = self._require_stdio(process)
             stderr_task = asyncio.create_task(
-                stdio.stderr.read(),
+                self._capture_stderr_tail(stderr=stdio.stderr, chunks=stderr_chunks),
                 name="acodex-async-stderr-reader",
             )
+            cleanup_stderr_task = stderr_task
 
             await self._write_stdin(stdin=stdio.stdin, stdin_text=command.stdin)
             async for line in self._iter_stdout_lines(
@@ -308,8 +335,12 @@ class AsyncCodexProcessRunner(CodexProcessRunnerBase):
                 yield line
 
             return_code = await process.wait()
-            stdout_text = b"".join(stdout_chunks).decode("utf-8", errors="replace")
-            stderr_text = await self._decode_stderr(stderr_task)
+            stdout_text = ""
+            stderr_text = ""
+            if return_code != 0:
+                await stderr_task
+                stdout_text = self._join_async_output_tail_chunks(stdout_chunks)
+                stderr_text = self._join_async_output_tail_chunks(stderr_chunks)
 
             self._raise_on_bad_exit(
                 return_code=return_code,
@@ -323,7 +354,7 @@ class AsyncCodexProcessRunner(CodexProcessRunnerBase):
             await self._cleanup(
                 process=process,
                 stdin=stdio.stdin if stdio is not None else None,
-                stderr_task=stderr_task,
+                stderr_task=cleanup_stderr_task,
             )
 
     async def _spawn_process(self, command: CodexExecCommand) -> asyncio.subprocess.Process:
@@ -344,7 +375,7 @@ class AsyncCodexProcessRunner(CodexProcessRunnerBase):
         *,
         process: asyncio.subprocess.Process,
         stdin: asyncio.StreamWriter | None,
-        stderr_task: asyncio.Task[bytes] | None,
+        stderr_task: asyncio.Task[None] | None,
     ) -> None:
         await self._terminate_process(process)
 
@@ -390,7 +421,7 @@ class AsyncCodexProcessRunner(CodexProcessRunnerBase):
         *,
         command: CodexExecCommand,
         stdout: asyncio.StreamReader,
-        stdout_chunks: list[bytes],
+        stdout_chunks: _AsyncOutputTailChunks | None = None,
     ) -> AsyncIterator[str]:
         buffer = bytearray()
         while True:
@@ -412,8 +443,21 @@ class AsyncCodexProcessRunner(CodexProcessRunnerBase):
                 return
 
             chunk_bytes = cast("bytes", chunk)
-            stdout_chunks.append(chunk_bytes)
+            if stdout_chunks is not None:
+                stdout_chunks.append(chunk_bytes)
             buffer.extend(chunk_bytes)
+
+    @staticmethod
+    async def _capture_stderr_tail(
+        *,
+        stderr: asyncio.StreamReader,
+        chunks: _AsyncOutputTailChunks,
+    ) -> None:
+        while True:
+            chunk = await stderr.read(_ASYNC_STDERR_READ_CHUNK_BYTES)
+            if not chunk:
+                return
+            chunks.append(chunk)
 
     @staticmethod
     def _pop_buffered_line(buffer: bytearray) -> bytes | None:
@@ -471,10 +515,6 @@ class AsyncCodexProcessRunner(CodexProcessRunnerBase):
     def _raise_on_bad_exit(cls, *, return_code: int, stdout: str, stderr: str) -> None:
         if return_code != 0:
             cls._raise_exec_error(detail=f"code {return_code}", stdout=stdout, stderr=stderr)
-
-    @staticmethod
-    async def _decode_stderr(stderr_task: asyncio.Task[bytes]) -> str:
-        return (await stderr_task).decode("utf-8", errors="replace")
 
     @staticmethod
     async def _terminate_process(process: asyncio.subprocess.Process) -> None:
