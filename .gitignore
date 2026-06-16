@@ -149,3 +149,5 @@ staticfiles/
 
 .local/
 .python-version
+
+references/
