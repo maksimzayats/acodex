@@ -2,6 +2,12 @@
 
 Python automation for the Codex desktop app.
 
+## Installation
+
+```bash
+uv add acodex
+```
+
 ## Usage
 
 List recent threads:
