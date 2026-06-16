@@ -2,18 +2,37 @@
 
 Thanks for contributing to acodex.
 
-acodex is a Python 3.10+ library with strict quality gates: Ruff (lint + format), mypy (strict),
-and 100% test coverage.
+acodex is a Python 3.10+ library with strict quality gates: Ruff for linting and formatting,
+strict mypy, and 100% test coverage.
 
-## Setup (uv)
+## Current SDK Direction
 
-Install development and docs dependencies:
+This branch focuses on a provisional async SDK for automating a running Codex desktop app.
+
+Current constraints:
+
+- Async client only.
+- The high-level client is `AsyncCodexApp`.
+- Public top-level `acodex` re-exports are intentionally disabled for now.
+- The client talks to the running desktop renderer through Chrome DevTools Protocol.
+- The default CDP endpoint is `http://127.0.0.1:9222`.
+- Read-only wrappers are the safest supported path.
+- State-changing wrappers exist, but they mutate live Codex app state.
+
+The user-facing README should stay focused on usage. Keep setup, implementation, and development
+details here.
+
+## Local Setup
+
+Install development dependencies with uv:
 
 ```bash
-uv sync --group dev --group docs
+uv sync --group dev
 ```
 
-## Quality gates
+Docs have been removed from this branch for now and will be rebuilt later.
+
+## Quality Gates
 
 Format:
 
@@ -21,59 +40,98 @@ Format:
 make format
 ```
 
-Lint + type check:
+Lint and type-check:
 
 ```bash
 make lint
 ```
 
-Tests (coverage must stay at 100%):
+Run the CI-safe test suite:
 
 ```bash
 make test
 ```
 
-`make test` is CI-safe and excludes the paid opt-in real Codex integration suite.
+Coverage must remain at 100%.
 
-Run the real SDK integration suite locally only when you explicitly want to exercise a live Codex
-setup:
+## CDP Backend Notes
 
-```bash
-ACODEX_RUN_REAL_INTEGRATION=1 make test-real-integration
+`AsyncCodexApp` composes a lower-level `CodexAppCdpBackend`. The backend:
+
+- fetches CDP targets from `/json/list`;
+- selects the Codex `app://` page target;
+- connects to the target websocket;
+- evaluates JavaScript through `Runtime.evaluate`;
+- discovers renderer `codex_app` thread tools;
+- invokes discovered tools through the renderer runtime.
+
+The SDK client should expose end-user behavior, not CDP debugging internals. Do not add public
+`AsyncCodexApp` properties for target metadata, discovery metadata, raw runtimes, or backend
+internals.
+
+## Configuration
+
+Pass `CodexAppCdpSettings` for explicit CDP configuration:
+
+```python
+from acodex.adapters.sdk.asyncio.client import AsyncCodexApp
+from acodex.core.asyncio.cdp.settings import CodexAppCdpSettings
+
+client = AsyncCodexApp(
+    settings=CodexAppCdpSettings(endpoint="http://127.0.0.1:9222"),
+)
 ```
 
-`ACODEX_REAL_MODEL` defaults to `gpt-5.3-codex` and can be overridden for local runs.
+Do not add separate shortcut parameters such as `AsyncCodexApp(endpoint=...)`. Keep CDP settings in
+`CodexAppCdpSettings`.
 
-Docs:
+Environment variables:
 
-```bash
-uv run sphinx-build -W -b html docs docs/_build/html
-```
+| Variable | Purpose |
+| --- | --- |
+| `ACODEX_CDP_ENDPOINT` | CDP HTTP endpoint. |
+| `ACODEX_CDP_TARGET_URL` | Exact Codex app target URL to prefer. |
+| `ACODEX_CDP_TARGET_URL_PREFIX` | App target URL prefix fallback. |
+| `ACODEX_CDP_HTTP_TIMEOUT` | Timeout for CDP HTTP target discovery. |
+| `ACODEX_CDP_RUNTIME_TIMEOUT` | Timeout for CDP runtime evaluation. |
 
-## TypeScript SDK parity workflow
+## SDK Surface Guidelines
 
-The vendored TypeScript SDK under `vendor/codex-ts-sdk/src/` is the source of truth for the public
-surface. CI enforces parity via `tests/compatibility/`.
+Direct methods are the intended SDK path:
 
-Common workflows:
+- `list_threads(...)`
+- `read_thread(...)`
+- `create_thread(...)`
+- `send_message_to_thread(...)`
+- `fork_thread(...)`
+- `set_thread_pinned(...)`
+- `set_thread_archived(...)`
+- `set_thread_title(...)`
+- `handoff_thread(...)`
 
-- Vendor the latest stable upstream release:
+Public Python method names and option keys must use `snake_case`. The backend translates payloads to
+the renderer's `camelCase` keys immediately before invocation.
 
-  ```bash
-  make vendor-ts-sdk-latest
-  ```
+`client.tools` is read-only and exists for advanced class-based usage. Prefer direct client methods
+in README examples and user-facing guidance.
 
-- Vendor a specific release tag:
+## Result Objects
 
-  ```bash
-  make vendor-ts-sdk TAG="vX.Y.Z"
-  ```
+Tool results currently provide typed attribute access and are backed by Pydantic models. Treat
+Pydantic-specific methods such as `model_dump()` as a temporary implementation detail; the intended
+long-term SDK shape is plain typed result objects.
 
-After vendoring, run the compatibility suite and fix any drift:
+## Live App Safety
 
-```bash
-uv run pytest tests/compatibility/
-```
+These methods change the running Codex app state:
 
-If you intentionally add a Python-specific divergence, document it in `DIFFERENCES.md` and add an
-explicit compatibility assertion in `tests/compatibility/` so the divergence stays stable.
+- `create_thread(...)`
+- `send_message_to_thread(...)`
+- `fork_thread(...)`
+- `set_thread_pinned(...)`
+- `set_thread_archived(...)`
+- `set_thread_title(...)`
+- `handoff_thread(...)`
+
+Unit tests should use fakes and must not require a live Codex app. Do not run live mutating CDP
+calls unless the user explicitly approves that exact action.

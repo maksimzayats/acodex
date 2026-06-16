@@ -1,4 +1,4 @@
-.PHONY: format lint test docs
+.PHONY: format lint test
 
 format:
 	uv run ruff format .
@@ -11,7 +11,3 @@ lint:
 
 test:
 	uv run pytest -m "not real_integration" tests/ --cov=src/acodex --cov-report=term-missing
-
-docs:
-	rm -rf docs/_build
-	uv run --group docs sphinx-build -W -b html docs docs/_build/html
