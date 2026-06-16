@@ -4,7 +4,7 @@ import inspect
 
 import pytest
 
-from acodex.adapters.sdk.asyncio.client import AsyncCodexApp
+from acodex import AsyncCodexApp
 from acodex.core.asyncio.cdp.settings import CodexAppCdpSettings
 
 

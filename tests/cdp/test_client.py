@@ -8,7 +8,7 @@ from typing import get_type_hints
 import pytest
 from typing_extensions import Unpack, override
 
-from acodex.adapters.sdk.asyncio.client import AsyncCodexApp
+from acodex import AsyncCodexApp
 from acodex.core.asyncio.cdp import runtime as cdp_runtime
 from acodex.core.asyncio.cdp.backend import CodexAppCdpBackend
 from acodex.core.asyncio.cdp.errors import (

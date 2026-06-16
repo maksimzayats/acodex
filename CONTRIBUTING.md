@@ -13,7 +13,7 @@ Current constraints:
 
 - Async client only.
 - The high-level client is `AsyncCodexApp`.
-- Public top-level `acodex` re-exports are intentionally disabled for now.
+- `AsyncCodexApp` is exported from the top-level `acodex` package.
 - The client talks to the running desktop renderer through Chrome DevTools Protocol.
 - The default CDP endpoint is `http://127.0.0.1:9222`.
 - Read-only wrappers are the safest supported path.
@@ -74,7 +74,7 @@ internals.
 Pass `CodexAppCdpSettings` for explicit CDP configuration:
 
 ```python
-from acodex.adapters.sdk.asyncio.client import AsyncCodexApp
+from acodex import AsyncCodexApp
 from acodex.core.asyncio.cdp.settings import CodexAppCdpSettings
 
 client = AsyncCodexApp(

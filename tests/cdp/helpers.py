@@ -9,7 +9,7 @@ from typing import Any
 
 from typing_extensions import override
 
-from acodex.adapters.sdk.asyncio.client import AsyncCodexApp
+from acodex import AsyncCodexApp
 from acodex.core.asyncio.cdp.backend import CodexAppCdpBackend
 from acodex.core.asyncio.cdp.renderer import ALL_CODEX_APP_THREAD_TOOL_NAMES
 from acodex.core.asyncio.cdp.runtime import CdpRuntime, CdpRuntimeConnector, CdpWebSocket

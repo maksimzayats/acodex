@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 
-from acodex.adapters.sdk.asyncio.client import AsyncCodexApp
+from acodex import AsyncCodexApp
 
 
 async def main() -> None:
