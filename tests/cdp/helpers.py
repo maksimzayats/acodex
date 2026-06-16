@@ -7,21 +7,19 @@ from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
 
-import pytest
 from typing_extensions import override
 
-from acodex import (
-    ALL_CODEX_APP_THREAD_TOOL_NAMES,
-    CdpTarget,
-    CodexAppCdpClient,
-    CodexAppCdpSettings,
-)
-from acodex.core.asyncio.cdp.runtime import CdpRuntimeEvaluator
-from acodex.core.asyncio.cdp.types import JsonObject, JsonValue
+from acodex.adapters.sdk.asyncio.client import AsyncCodexApp
+from acodex.core.asyncio.cdp.backend import CodexAppCdpBackend
+from acodex.core.asyncio.cdp.renderer import ALL_CODEX_APP_THREAD_TOOL_NAMES
+from acodex.core.asyncio.cdp.runtime import CdpRuntime, CdpRuntimeConnector, CdpWebSocket
+from acodex.core.asyncio.cdp.settings import CodexAppCdpSettings
+from acodex.core.asyncio.cdp.targets import CdpTargetFetcher
+from acodex.core.asyncio.cdp.types import CdpTarget, JsonObject, JsonValue
 
 
 @dataclass(slots=True)
-class FakeRuntime:
+class FakeRuntime(CdpRuntime):
     responses: list[JsonValue]
     expressions: list[str] = field(default_factory=list)
     closed: bool = False
@@ -35,7 +33,7 @@ class FakeRuntime:
 
 
 @dataclass(slots=True)
-class FakeWebSocket:
+class FakeWebSocket(CdpWebSocket):
     incoming: list[str | bytes]
     sent: list[str] = field(default_factory=list)
     closed: bool = False
@@ -86,34 +84,69 @@ class JsonServer:
         return Handler
 
 
-def client_with_runtime(runtime: FakeRuntime) -> CodexAppCdpClient:
-    async def target_fetcher(settings: CodexAppCdpSettings) -> tuple[CdpTarget, ...]:
-        await asyncio.sleep(0)
-        assert settings.endpoint == "http://cdp"
-        assert settings.http_timeout == pytest.approx(10.0)
-        return (
-            CdpTarget(
-                id="target",
-                kind="page",
-                url="app://-/index.html",
-                websocket_debugger_url="ws://target",
-            ),
-        )
+@dataclass(slots=True)
+class FakeTargetFetcher(CdpTargetFetcher):
+    targets: tuple[CdpTarget, ...] = (
+        CdpTarget(
+            id="target",
+            kind="page",
+            url="app://-/index.html",
+            websocket_debugger_url="ws://target",
+        ),
+    )
+    endpoints: list[str] = field(default_factory=list)
+    http_timeouts: list[float] = field(default_factory=list)
 
-    async def runtime_connector(
+    async def fetch(
+        self,
+        endpoint: str = "http://127.0.0.1:9222",
+        *,
+        http_timeout: float = 10.0,
+    ) -> tuple[CdpTarget, ...]:
+        await asyncio.sleep(0)
+        self.endpoints.append(endpoint)
+        self.http_timeouts.append(http_timeout)
+        return self.targets
+
+
+@dataclass(slots=True)
+class FakeRuntimeConnector(CdpRuntimeConnector):
+    runtime: CdpRuntime
+    websocket_urls: list[str] = field(default_factory=list)
+    runtime_timeouts: list[float] = field(default_factory=list)
+
+    async def connect(
+        self,
         websocket_url: str,
         *,
-        runtime_timeout: float,
-    ) -> CdpRuntimeEvaluator:
+        runtime_timeout: float = 30.0,
+    ) -> CdpRuntime:
         await asyncio.sleep(0)
-        assert websocket_url == "ws://target"
-        assert runtime_timeout == pytest.approx(30.0)
-        return runtime
+        self.websocket_urls.append(websocket_url)
+        self.runtime_timeouts.append(runtime_timeout)
+        return self.runtime
 
-    return CodexAppCdpClient(
-        "http://cdp",
-        target_fetcher=target_fetcher,
-        runtime_connector=runtime_connector,
+
+def client_with_runtime(runtime: FakeRuntime) -> AsyncCodexApp:
+    return AsyncCodexApp(backend=backend_with_runtime(runtime))
+
+
+def backend_with_runtime(runtime: FakeRuntime) -> CodexAppCdpBackend:
+    return CodexAppCdpBackend(
+        settings=CodexAppCdpSettings(endpoint="http://cdp"),
+        target_fetcher=FakeTargetFetcher(),
+        runtime_connector=FakeRuntimeConnector(runtime),
+    )
+
+
+def default_targets() -> tuple[CdpTarget, ...]:
+    return (
+        CdpTarget(
+            id="target",
+            kind="page",
+            url="app://-/index.html",
+            websocket_debugger_url="ws://target",
+        ),
     )
 
 

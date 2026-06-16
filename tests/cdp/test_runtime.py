@@ -5,14 +5,14 @@ import json
 
 import pytest
 
-from acodex import (
+from acodex.core.asyncio.cdp import json_utils as cdp_json, runtime as cdp_runtime
+from acodex.core.asyncio.cdp.errors import (
     CodexAppCdpError,
     CodexAppCdpEvaluationError,
     CodexAppCdpProtocolError,
-    JsonObject,
-    parse_runtime_evaluate_response,
 )
-from acodex.core.asyncio.cdp import json_utils as cdp_json, runtime as cdp_runtime
+from acodex.core.asyncio.cdp.runtime import parse_runtime_evaluate_response
+from acodex.core.asyncio.cdp.types import JsonObject
 from tests.cdp.helpers import FakeWebSocket
 
 
@@ -98,7 +98,7 @@ def test_cdp_runtime_connection_evaluates_and_ignores_notifications() -> None:
             json.dumps({"id": 1, "result": {"result": {"value": "ok"}}}).encode(),
         ],
     )
-    runtime = cdp_runtime._CdpRuntimeConnection(websocket, timeout=0.1)
+    runtime = cdp_runtime.CdpRuntimeConnection(websocket, timeout=0.1)
 
     assert asyncio.run(runtime.evaluate("1 + 1")) == "ok"
     asyncio.run(runtime.close())
@@ -133,9 +133,32 @@ def test_default_websocket_connector_uses_websockets_module(
 
     monkeypatch.setattr(cdp_runtime, "import_module", lambda _name: FakeWebsocketsModule())
 
-    runtime = asyncio.run(cdp_runtime.connect_websocket_runtime("ws://target"))
+    runtime = asyncio.run(cdp_runtime.WebsocketCdpRuntimeConnector().connect("ws://target"))
 
     assert asyncio.run(runtime.evaluate("ok")) == "ok"
+    asyncio.run(runtime.close())
+    assert websocket.closed
+
+
+def test_wrapped_websocket_rejects_non_text_or_bytes_messages() -> None:
+    class BadWebSocket:
+        @staticmethod
+        async def send(_message: str) -> None:
+            await asyncio.sleep(0)
+
+        @staticmethod
+        async def recv() -> int:
+            await asyncio.sleep(0)
+            return 1
+
+        @staticmethod
+        async def close() -> None:
+            await asyncio.sleep(0)
+
+    websocket = cdp_runtime.WrappedCdpWebSocket(BadWebSocket())
+
+    with pytest.raises(CodexAppCdpProtocolError, match="text or bytes"):
+        asyncio.run(websocket.recv())
 
 
 def test_json_decoding_rejects_non_object_and_non_json_values() -> None:

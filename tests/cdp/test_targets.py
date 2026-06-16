@@ -4,15 +4,14 @@ import asyncio
 
 import pytest
 
-from acodex import (
-    CdpTarget,
-    CodexAppCdpConnectionError,
-    CodexAppCdpProtocolError,
+from acodex.core.asyncio.cdp import targets as cdp_targets
+from acodex.core.asyncio.cdp.errors import CodexAppCdpConnectionError, CodexAppCdpProtocolError
+from acodex.core.asyncio.cdp.targets import (
     fetch_cdp_targets,
     parse_cdp_targets,
     select_codex_app_target,
 )
-from acodex.core.asyncio.cdp import targets as cdp_targets
+from acodex.core.asyncio.cdp.types import CdpTarget
 from tests.cdp.helpers import JsonServer
 
 

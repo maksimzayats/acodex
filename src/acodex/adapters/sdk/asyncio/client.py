@@ -1,24 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
 from types import TracebackType
-from typing import Protocol, TypeAlias
 
 from typing_extensions import Self, Unpack
 
-from acodex.core.asyncio.cdp.errors import (
-    CodexAppCdpConnectionError,
-    CodexAppCdpDiscoveryError,
-)
-from acodex.core.asyncio.cdp.renderer import (
-    build_tool_discovery_expression,
-    build_tool_invocation_expression,
-    parse_tool_discovery_result,
-)
-from acodex.core.asyncio.cdp.runtime import CdpRuntimeEvaluator, connect_websocket_runtime
+from acodex.core.asyncio.cdp.backend import CodexAppCdpBackend
 from acodex.core.asyncio.cdp.settings import CodexAppCdpSettings
-from acodex.core.asyncio.cdp.targets import fetch_cdp_targets, select_codex_app_target
-from acodex.core.asyncio.cdp.types import CdpTarget, CodexAppToolDiscovery, JsonObject, JsonValue
 from acodex.core.asyncio.tools.create_thread import CreateThreadToolInput, CreateThreadToolOutput
 from acodex.core.asyncio.tools.fork_thread import ForkThreadToolInput, ForkThreadToolOutput
 from acodex.core.asyncio.tools.handoff_thread import HandoffThreadToolInput, HandoffThreadToolOutput
@@ -42,15 +29,35 @@ from acodex.core.asyncio.tools.set_thread_title import (
 )
 from acodex.core.asyncio.tools.thread_tools import CodexAppThreadTools
 
+
 class AsyncCodexApp:
     def __init__(
         self,
         settings: CodexAppCdpSettings | None = None,
+        *,
+        backend: CodexAppCdpBackend | None = None,
     ) -> None:
-        self._settings = settings or CodexAppCdpSettings()
+        self._backend = backend or CodexAppCdpBackend(settings=settings)
+        self._tools = CodexAppThreadTools.bind(self._backend)
+
+    @property
+    def tools(self) -> CodexAppThreadTools:
+        """Return bound tool objects for advanced class-based usage.
+
+        Direct client methods are the primary SDK path. The grouped tool objects are useful when a
+        caller wants tool metadata or wants to pass a specific tool object around.
+
+        """
+        return self._tools
+
+    @property
+    def settings(self) -> CodexAppCdpSettings:
+        """Return the resolved CDP settings used by this client."""
+        return self._backend.settings
 
     async def __aenter__(self) -> Self:
-        return await self.connect()
+        await self.connect()
+        return self
 
     async def __aexit__(  # noqa: PLR0917
         self,
@@ -61,12 +68,18 @@ class AsyncCodexApp:
         await self.close()
 
     async def connect(self) -> Self:
-        pass
+        """Connect to the running Codex desktop app renderer.
+
+        Returns:
+            This client after the CDP backend has connected and discovered tools.
+
+        """
+        await self._backend.connect()
+        return self
 
     async def close(self) -> None:
-        pass
-
-    # region: Thread Tools
+        """Close the underlying CDP connection when one is open."""
+        await self._backend.close()
 
     async def list_threads(
         self,
@@ -177,5 +190,3 @@ class AsyncCodexApp:
 
         """
         return await self.tools.handoff_thread(**arguments)
-
-    # endregion: Thread Tools

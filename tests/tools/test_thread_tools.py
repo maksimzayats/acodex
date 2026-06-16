@@ -10,15 +10,20 @@ import pytest
 from pydantic import ValidationError
 from typing_extensions import Unpack
 
-from acodex import CodexAppCdpProtocolError, JsonObject, JsonValue
+from acodex.core.asyncio.cdp.errors import CodexAppCdpProtocolError
+from acodex.core.asyncio.cdp.types import JsonObject, JsonValue
 from acodex.core.asyncio.tools import base as tools_base
-from acodex.core.asyncio.tools.base import dump_tool_input, parse_tool_output
+from acodex.core.asyncio.tools.base import (
+    AsyncRendererToolInvoker,
+    dump_tool_input,
+    parse_tool_output,
+)
 from acodex.core.asyncio.tools.create_thread import (
     CreateThreadTool,
     CreateThreadToolInput,
     CreateThreadToolOutput,
 )
-from acodex.core.asyncio.tools import (
+from acodex.core.asyncio.tools.fork_thread import (
     ForkThreadTool,
     ForkThreadToolInput,
     ForkThreadToolOutput,
@@ -28,7 +33,7 @@ from acodex.core.asyncio.tools.handoff_thread import (
     HandoffThreadToolInput,
     HandoffThreadToolOutput,
 )
-from acodex.core.asyncio.tools import (
+from acodex.core.asyncio.tools.list_threads import (
     ListThreadsTool,
     ListThreadsToolInput,
     ListThreadsToolOutput,
@@ -53,7 +58,7 @@ from acodex.core.asyncio.tools.set_thread_pinned import (
     SetThreadPinnedToolInput,
     SetThreadPinnedToolOutput,
 )
-from acodex.core.asyncio.tools import (
+from acodex.core.asyncio.tools.set_thread_title import (
     SetThreadTitleTool,
     SetThreadTitleToolInput,
     SetThreadTitleToolOutput,
@@ -82,11 +87,11 @@ def default_tool_result() -> JsonValue:
 
 
 @dataclass(slots=True)
-class RecordingInvoker:
+class RecordingInvoker(AsyncRendererToolInvoker):
     result: JsonValue = field(default_factory=default_tool_result)
     calls: list[tuple[str, JsonObject, str | None]] = field(default_factory=list)
 
-    async def __call__(
+    async def invoke_tool(
         self,
         tool_name: str,
         arguments: JsonObject,
@@ -373,6 +378,15 @@ def test_dump_tool_input_excludes_none_and_uses_optional_aliases(
 ) -> None:
     input_type, payload, expected = case
     assert dump_tool_input(input_type, payload) == expected
+
+
+def test_renderer_tool_invoker_call_delegates_to_invoke_tool() -> None:
+    invoker = RecordingInvoker(result={"ok": True})
+
+    result = asyncio.run(invoker("list_threads", {"limit": 1}, source_thread_id="source"))
+
+    assert result == {"ok": True}
+    assert invoker.calls == [("list_threads", {"limit": 1}, "source")]
 
 
 def test_read_thread_tool_input_and_signature_are_snake_case() -> None:

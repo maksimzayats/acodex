@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import inspect
+
 import pytest
 
-from acodex import CodexAppCdpClient, CodexAppCdpSettings
+from acodex.adapters.sdk.asyncio.client import AsyncCodexApp
+from acodex.core.asyncio.cdp.settings import CodexAppCdpSettings
 
 
 def test_settings_read_environment_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -21,9 +24,16 @@ def test_settings_read_environment_overrides(monkeypatch: pytest.MonkeyPatch) ->
     assert settings.runtime_timeout == pytest.approx(2.5)
 
 
-def test_client_explicit_endpoint_overrides_settings_env(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_client_uses_settings_for_custom_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ACODEX_CDP_ENDPOINT", "http://env:9222")
 
-    client = CodexAppCdpClient(endpoint="http://explicit:9222")
+    client = AsyncCodexApp(settings=CodexAppCdpSettings(endpoint="http://explicit:9222"))
 
     assert client.settings.endpoint == "http://explicit:9222"
+
+
+def test_client_constructor_has_one_settings_path() -> None:
+    signature = inspect.signature(AsyncCodexApp)
+
+    assert "settings" in signature.parameters
+    assert "endpoint" not in signature.parameters

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
+from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from typing import Any, ClassVar, Generic, Literal, Protocol, TypeVar
+from typing import Any, ClassVar, Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
@@ -13,7 +14,7 @@ from acodex.core.asyncio.cdp.types import JsonObject, JsonValue
 ToolOutputT = TypeVar("ToolOutputT", bound=BaseModel)
 
 
-class AsyncRendererToolInvoker(Protocol):
+class AsyncRendererToolInvoker(ABC):
     async def __call__(
         self,
         tool_name: str,
@@ -27,7 +28,27 @@ class AsyncRendererToolInvoker(Protocol):
             The renderer-native JSON result.
 
         """
-        ...
+        return await self.invoke_tool(
+            tool_name,
+            arguments,
+            source_thread_id=source_thread_id,
+        )
+
+    @abstractmethod
+    async def invoke_tool(
+        self,
+        tool_name: str,
+        arguments: JsonObject,
+        *,
+        source_thread_id: str | None = None,
+    ) -> JsonValue:
+        """Invoke a renderer tool with an already serialized JSON object.
+
+        Returns:
+            The renderer-native JSON result.
+
+        """
+        raise NotImplementedError
 
 
 class RendererToolOutput(BaseModel):
@@ -63,7 +84,7 @@ class BaseAsyncTool(Generic[ToolOutputT]):
         source_thread_id: str | None = None,
     ) -> ToolOutputT:
         renderer_payload = dump_tool_input(self.INPUT_TYPE, arguments)
-        result = await self._invoker(
+        result = await self._invoker.invoke_tool(
             self.NAME,
             renderer_payload,
             source_thread_id=source_thread_id,

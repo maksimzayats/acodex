@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from acodex import (
+from acodex.core.asyncio.cdp.errors import CodexAppCdpDiscoveryError
+from acodex.core.asyncio.cdp.renderer import (
     ALL_CODEX_APP_THREAD_TOOL_NAMES,
-    CodexAppCdpDiscoveryError,
-    JsonValue,
     build_tool_discovery_expression,
     build_tool_invocation_expression,
     parse_tool_discovery_result,
 )
+from acodex.core.asyncio.cdp.types import JsonValue
 from tests.cdp.helpers import discovery_result
 
 

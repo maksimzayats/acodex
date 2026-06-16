@@ -1,75 +1,161 @@
 # acodex
 
-acodex is under active redevelopment. The current branch contains an initial async CDP backend for
-talking to a running Codex desktop app renderer through Chrome DevTools Protocol.
+Python experiments for automating the Codex desktop app.
 
-The old CLI/TypeScript-SDK-parity implementation has been removed from this branch.
+This branch currently focuses on a provisional async SDK that talks to a running Codex desktop
+renderer through Chrome DevTools Protocol (CDP). The API is intentionally narrow while the SDK shape
+is still settling.
 
-## CDP backend
+## Status
 
-`CodexAppCdpClient` connects to a configurable CDP endpoint, defaults to
-`http://127.0.0.1:9222`, finds the `app://-/index.html` page target, discovers the renderer's
-dynamic `codex_app` thread tools, and invokes them through `Runtime.evaluate`.
+- Python 3.10+
+- Async client only
+- CDP endpoint default: `http://127.0.0.1:9222`
+- Public top-level `acodex` re-exports are intentionally disabled for now
+- Read-only thread wrappers are the safest supported path
+- State-changing wrappers exist, but mutate the live Codex app
 
-Read-only wrappers are available for `list_threads()` and `read_thread(...)`. The client also
-binds class-based tool objects under `client.tools`, for example
-`client.tools.list_threads(...)`.
+## Prerequisites
 
-Configuration can be passed with `CodexAppCdpSettings` or environment variables:
+You need a running Codex desktop app with CDP enabled and reachable at the configured endpoint.
 
-- `ACODEX_CDP_ENDPOINT`
-- `ACODEX_CDP_TARGET_URL`
-- `ACODEX_CDP_TARGET_URL_PREFIX`
-- `ACODEX_CDP_HTTP_TIMEOUT`
-- `ACODEX_CDP_RUNTIME_TIMEOUT`
+To verify the default endpoint:
+
+```bash
+curl http://127.0.0.1:9222/json/list
+```
+
+The client selects the Codex `app://` page target from that target list and invokes the renderer's
+`codex_app` thread tools through `Runtime.evaluate`.
+
+## Installation
+
+For local development from this checkout:
+
+```bash
+uv sync --group dev
+```
+
+The package metadata lives in `pyproject.toml`; prefer `uv` for all local tooling.
+
+## Quickstart
 
 ```python
 from __future__ import annotations
 
 import asyncio
 
-from acodex import CodexAppCdpClient
+from acodex.adapters.sdk.asyncio.client import AsyncCodexApp
 
 
 async def main() -> None:
-    async with CodexAppCdpClient() as client:
+    async with AsyncCodexApp() as client:
         threads = await client.list_threads(limit=5)
-        thread = await client.read_thread(
-            thread_id="019ed0be-fa81-7662-b15c-17472a4f440c",
-            turn_limit=3,
-            include_outputs=False,
-        )
-        print(threads.model_dump())
-        print(thread.model_dump())
+
+        for thread in threads.threads:
+            print(thread.id, thread.title)
 
 
 asyncio.run(main())
 ```
 
-State-changing wrappers are available directly. Do not call them against a real Codex app unless
-you intend to change app state.
+Read a thread:
 
 ```python
-await client.set_thread_pinned(
-    thread_id="019ed0be-fa81-7662-b15c-17472a4f440c",
-    pinned=True,
+async with AsyncCodexApp() as client:
+    thread = await client.read_thread(
+        thread_id="019ed0be-fa81-7662-b15c-17472a4f440c",
+        turn_limit=3,
+        include_outputs=False,
+    )
+    print(thread.thread.title)
+```
+
+## Configuration
+
+Pass `CodexAppCdpSettings` for explicit configuration:
+
+```python
+from acodex.adapters.sdk.asyncio.client import AsyncCodexApp
+from acodex.core.asyncio.cdp.settings import CodexAppCdpSettings
+
+client = AsyncCodexApp(
+    settings=CodexAppCdpSettings(endpoint="http://127.0.0.1:9222"),
 )
 ```
 
-Public Python methods and options stay snake_case. The backend translates to the renderer's
-camelCase payload keys internally immediately before invocation.
+Environment variables are also supported:
+
+| Variable | Purpose |
+| --- | --- |
+| `ACODEX_CDP_ENDPOINT` | CDP HTTP endpoint. |
+| `ACODEX_CDP_TARGET_URL` | Exact Codex app target URL to prefer. |
+| `ACODEX_CDP_TARGET_URL_PREFIX` | App target URL prefix fallback. |
+| `ACODEX_CDP_HTTP_TIMEOUT` | Timeout for CDP HTTP target discovery. |
+| `ACODEX_CDP_RUNTIME_TIMEOUT` | Timeout for CDP runtime evaluation. |
+
+## SDK Surface
+
+Import the provisional async client directly:
+
+```python
+from acodex.adapters.sdk.asyncio.client import AsyncCodexApp
+```
+
+Direct methods are the intended SDK path:
+
+- `list_threads(...)`
+- `read_thread(...)`
+- `create_thread(...)`
+- `send_message_to_thread(...)`
+- `fork_thread(...)`
+- `set_thread_pinned(...)`
+- `set_thread_archived(...)`
+- `set_thread_title(...)`
+- `handoff_thread(...)`
+
+Public Python method names and option keys use `snake_case`. The CDP backend translates payloads to
+the renderer's `camelCase` keys immediately before invocation.
+
+`client.tools` exposes read-only class-based tool objects for advanced callers that need to pass a
+specific tool object around. Prefer direct client methods unless you have that need.
+
+## Live App Mutations
+
+These methods change the running Codex app state:
+
+- `create_thread(...)`
+- `send_message_to_thread(...)`
+- `fork_thread(...)`
+- `set_thread_pinned(...)`
+- `set_thread_archived(...)`
+- `set_thread_title(...)`
+- `handoff_thread(...)`
+
+Call them only when you intend to mutate the live app.
+
+## Result Objects
+
+Tool results currently provide typed attribute access and are backed by Pydantic models. Treat
+Pydantic-specific methods such as `model_dump()` as a temporary implementation detail; the intended
+long-term SDK shape is plain typed result objects.
 
 ## Development
 
-Use uv for local tooling:
-
 ```bash
-uv sync --group dev
 make format
 make lint
 make test
 ```
 
-## Disclaimer
+Run the real Codex integration suite only when a live local Codex setup is available:
 
-It is independently maintained and is not affiliated with, sponsored by, or endorsed by OpenAI.
+```bash
+ACODEX_RUN_REAL_INTEGRATION=1 make test-real-integration
+```
+
+## License
+
+Apache-2.0. See `LICENSE`.
+
+acodex is independently maintained and is not affiliated with, sponsored by, or endorsed by OpenAI.

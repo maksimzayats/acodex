@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Mapping
+from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from importlib import import_module
-from typing import NoReturn, Protocol, cast
+from typing import Any, NoReturn
+
+from typing_extensions import override
 
 from acodex.core.asyncio.cdp.errors import CodexAppCdpEvaluationError, CodexAppCdpProtocolError
 from acodex.core.asyncio.cdp.json_utils import decode_json_object, dump_json
@@ -11,7 +14,8 @@ from acodex.core.asyncio.cdp.settings import DEFAULT_CDP_RUNTIME_TIMEOUT
 from acodex.core.asyncio.cdp.types import JsonObject, JsonValue
 
 
-class CdpRuntimeEvaluator(Protocol):
+class CdpRuntime(ABC):
+    @abstractmethod
     async def evaluate(self, expression: str) -> JsonValue:
         """Evaluate a JavaScript expression through CDP Runtime.evaluate.
 
@@ -19,27 +23,93 @@ class CdpRuntimeEvaluator(Protocol):
             The JSON-serializable value returned by the browser.
 
         """
+        raise NotImplementedError
 
+    @abstractmethod
     async def close(self) -> None:
         """Close the underlying runtime connection."""
+        raise NotImplementedError
 
 
-class _CdpWebSocket(Protocol):
-    async def send(self, message: str) -> None: ...
+class CdpWebSocket(ABC):
+    @abstractmethod
+    async def send(self, message: str) -> None:
+        """Send one serialized CDP websocket message."""
+        raise NotImplementedError
 
-    async def recv(self) -> str | bytes: ...
+    @abstractmethod
+    async def recv(self) -> str | bytes:
+        """Receive one raw CDP websocket message."""
+        raise NotImplementedError
 
-    async def close(self) -> None: ...
+    @abstractmethod
+    async def close(self) -> None:
+        """Close the websocket connection."""
+        raise NotImplementedError
 
 
-class _WebSocketConnect(Protocol):
-    def __call__(self, uri: str, *, max_size: int | None) -> Awaitable[_CdpWebSocket]: ...
+class WrappedCdpWebSocket(CdpWebSocket):
+    def __init__(self, websocket: Any) -> None:
+        # websockets is imported dynamically so tests can replace the client module.
+        self._websocket = websocket
+
+    @override
+    async def send(self, message: str) -> None:
+        """Send one serialized CDP websocket message."""
+        await self._websocket.send(message)
+
+    @override
+    async def recv(self) -> str | bytes:
+        """Receive one raw CDP websocket message.
+
+        Returns:
+            The raw websocket message.
+
+        Raises:
+            CodexAppCdpProtocolError: If the message is not text or bytes.
+
+        """
+        message = await self._websocket.recv()
+        if not isinstance(message, str | bytes):
+            raise CodexAppCdpProtocolError("CDP websocket message must be text or bytes")
+        return message
+
+    @override
+    async def close(self) -> None:
+        """Close the websocket connection."""
+        await self._websocket.close()
 
 
-class _CdpRuntimeConnection:
+class CdpWebSocketConnector(ABC):
+    @abstractmethod
+    async def connect(self, websocket_url: str) -> CdpWebSocket:
+        """Open a websocket connection to a CDP page target.
+
+        Returns:
+            A websocket wrapper for sending and receiving CDP messages.
+
+        """
+        raise NotImplementedError
+
+
+class WebsocketsCdpWebSocketConnector(CdpWebSocketConnector):
+    @override
+    async def connect(self, websocket_url: str) -> CdpWebSocket:
+        """Open a websocket connection to a CDP page target.
+
+        Returns:
+            A websocket wrapper for sending and receiving CDP messages.
+
+        """
+        client_module = import_module("websockets.asyncio.client")
+        websocket = await client_module.connect(websocket_url, max_size=None)
+        return WrappedCdpWebSocket(websocket)
+
+
+class CdpRuntimeConnection(CdpRuntime):
     def __init__(
         self,
-        websocket: _CdpWebSocket,
+        websocket: CdpWebSocket,
         *,
         timeout: float = DEFAULT_CDP_RUNTIME_TIMEOUT,
     ) -> None:
@@ -47,7 +117,14 @@ class _CdpRuntimeConnection:
         self._timeout = timeout
         self._next_request_id = 1
 
+    @override
     async def evaluate(self, expression: str) -> JsonValue:
+        """Evaluate a JavaScript expression through CDP Runtime.evaluate.
+
+        Returns:
+            The JSON-serializable value returned by the browser.
+
+        """
         request_id = self._next_request_id
         self._next_request_id += 1
         request: JsonObject = {
@@ -67,19 +144,48 @@ class _CdpRuntimeConnection:
             if response.get("id") == request_id:
                 return parse_runtime_evaluate_response(response)
 
+    @override
     async def close(self) -> None:
+        """Close the underlying runtime connection."""
         await self._websocket.close()
 
 
-async def connect_websocket_runtime(
-    websocket_url: str,
-    *,
-    runtime_timeout: float = DEFAULT_CDP_RUNTIME_TIMEOUT,
-) -> CdpRuntimeEvaluator:
-    client_module = import_module("websockets.asyncio.client")
-    connect = cast("_WebSocketConnect", client_module.connect)
-    websocket = await connect(websocket_url, max_size=None)
-    return _CdpRuntimeConnection(websocket, timeout=runtime_timeout)
+class CdpRuntimeConnector(ABC):
+    @abstractmethod
+    async def connect(
+        self,
+        websocket_url: str,
+        *,
+        runtime_timeout: float = DEFAULT_CDP_RUNTIME_TIMEOUT,
+    ) -> CdpRuntime:
+        """Connect to a CDP page target and return a Runtime evaluator.
+
+        Returns:
+            A connected CDP runtime evaluator.
+
+        """
+        raise NotImplementedError
+
+
+class WebsocketCdpRuntimeConnector(CdpRuntimeConnector):
+    def __init__(self, websocket_connector: CdpWebSocketConnector | None = None) -> None:
+        self._websocket_connector = websocket_connector or WebsocketsCdpWebSocketConnector()
+
+    @override
+    async def connect(
+        self,
+        websocket_url: str,
+        *,
+        runtime_timeout: float = DEFAULT_CDP_RUNTIME_TIMEOUT,
+    ) -> CdpRuntime:
+        """Connect to a CDP page target and return a Runtime evaluator.
+
+        Returns:
+            A connected CDP runtime evaluator.
+
+        """
+        websocket = await self._websocket_connector.connect(websocket_url)
+        return CdpRuntimeConnection(websocket, timeout=runtime_timeout)
 
 
 def parse_runtime_evaluate_response(response: JsonObject) -> JsonValue:

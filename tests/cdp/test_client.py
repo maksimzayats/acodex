@@ -6,23 +6,27 @@ import json
 from typing import get_type_hints
 
 import pytest
-from typing_extensions import Unpack
+from typing_extensions import Unpack, override
 
-from acodex import (
-    ALL_CODEX_APP_THREAD_TOOL_NAMES,
-    CdpTarget,
-    CodexAppCdpClient,
+from acodex.adapters.sdk.asyncio.client import AsyncCodexApp
+from acodex.core.asyncio.cdp import runtime as cdp_runtime
+from acodex.core.asyncio.cdp.backend import CodexAppCdpBackend
+from acodex.core.asyncio.cdp.errors import (
     CodexAppCdpConnectionError,
     CodexAppCdpDiscoveryError,
-    CodexAppCdpSettings,
-    JsonObject,
 )
-from acodex.core.asyncio.cdp import runtime as cdp_runtime
-from acodex.core.asyncio.cdp.runtime import CdpRuntimeEvaluator
+from acodex.core.asyncio.cdp.renderer import ALL_CODEX_APP_THREAD_TOOL_NAMES
+from acodex.core.asyncio.cdp.runtime import CdpRuntime, CdpRuntimeConnector
+from acodex.core.asyncio.cdp.settings import CodexAppCdpSettings
+from acodex.core.asyncio.cdp.targets import CdpTargetFetcher
+from acodex.core.asyncio.cdp.types import CdpTarget, JsonObject
 from acodex.core.asyncio.tools.read_thread import ReadThreadToolInput
 from tests.cdp.helpers import (
     FakeRuntime,
+    FakeRuntimeConnector,
+    FakeTargetFetcher,
     FakeWebSocket,
+    backend_with_runtime,
     client_with_runtime,
     discovery_result,
     renderer_success,
@@ -61,7 +65,7 @@ READ_THREAD_OUTPUT: JsonObject = {
 
 
 def test_public_read_thread_signature_is_snake_case() -> None:
-    type_hints = get_type_hints(CodexAppCdpClient.read_thread, include_extras=True)
+    type_hints = get_type_hints(AsyncCodexApp.read_thread, include_extras=True)
     read_thread_keys = ReadThreadToolInput.__annotations__.keys()
 
     assert type_hints["arguments"] == Unpack[ReadThreadToolInput]
@@ -76,9 +80,22 @@ def test_public_read_thread_signature_is_snake_case() -> None:
 
 
 def test_client_constructor_does_not_store_source_thread_context() -> None:
-    signature = inspect.signature(CodexAppCdpClient)
+    signature = inspect.signature(AsyncCodexApp)
 
     assert "source_thread_id" not in signature.parameters
+
+
+def test_client_hides_backend_and_exposes_read_only_tools() -> None:
+    client = client_with_runtime(
+        FakeRuntime(responses=[discovery_result(ALL_CODEX_APP_THREAD_TOOL_NAMES)]),
+    )
+
+    assert not hasattr(client, "backend")
+    assert not hasattr(client, "target")
+    assert not hasattr(client, "tool_discovery")
+    assert client.tools is client.tools
+    with pytest.raises(AttributeError):
+        client.tools = client.tools
 
 
 def test_read_only_wrappers_translate_to_renderer_payload() -> None:
@@ -149,14 +166,15 @@ def test_read_only_wrappers_translate_to_renderer_payload() -> None:
 
 def test_connect_is_idempotent_and_context_manager_closes_runtime() -> None:
     runtime = FakeRuntime(responses=[discovery_result(ALL_CODEX_APP_THREAD_TOOL_NAMES)])
-    client = client_with_runtime(runtime)
+    backend = backend_with_runtime(runtime)
+    client = AsyncCodexApp(backend=backend)
 
     async def run_client() -> None:
         async with client as connected:
             assert connected is client
             assert await client.connect() is client
-            assert client.target is not None
-            assert client.tool_discovery is not None
+            assert backend.target is not None
+            assert backend.tool_discovery is not None
 
     asyncio.run(run_client())
 
@@ -164,8 +182,22 @@ def test_connect_is_idempotent_and_context_manager_closes_runtime() -> None:
     assert len(runtime.expressions) == 1
 
 
+def test_backend_context_manager_closes_runtime() -> None:
+    runtime = FakeRuntime(responses=[discovery_result(ALL_CODEX_APP_THREAD_TOOL_NAMES)])
+    backend = backend_with_runtime(runtime)
+
+    async def run_backend() -> None:
+        async with backend as connected:
+            assert connected is backend
+            assert backend.runtime is runtime
+
+    asyncio.run(run_backend())
+
+    assert runtime.closed
+
+
 def test_close_without_runtime_is_noop() -> None:
-    asyncio.run(CodexAppCdpClient().close())
+    asyncio.run(AsyncCodexApp().close())
 
 
 def test_client_uses_settings_for_target_selection_and_timeouts() -> None:
@@ -178,10 +210,8 @@ def test_client_uses_settings_for_target_selection_and_timeouts() -> None:
         runtime_timeout=2.5,
     )
 
-    async def target_fetcher(received_settings: CodexAppCdpSettings) -> tuple[CdpTarget, ...]:
-        await asyncio.sleep(0)
-        assert received_settings is settings
-        return (
+    target_fetcher = FakeTargetFetcher(
+        targets=(
             CdpTarget(
                 id="fallback",
                 kind="page",
@@ -194,28 +224,32 @@ def test_client_uses_settings_for_target_selection_and_timeouts() -> None:
                 url="app://custom/index.html",
                 websocket_debugger_url="ws://exact",
             ),
-        )
+        ),
+    )
+    runtime_connector = FakeRuntimeConnector(runtime)
 
-    async def runtime_connector(
-        websocket_url: str,
-        *,
-        runtime_timeout: float,
-    ) -> CdpRuntimeEvaluator:
-        await asyncio.sleep(0)
-        assert websocket_url == "ws://exact"
-        assert runtime_timeout == pytest.approx(2.5)
-        return runtime
-
-    client = CodexAppCdpClient(
+    backend = CodexAppCdpBackend(
         settings=settings,
         target_fetcher=target_fetcher,
         runtime_connector=runtime_connector,
     )
+    client = AsyncCodexApp(backend=backend)
 
     asyncio.run(client.connect())
 
-    assert client.target is not None
-    assert client.target.id == "exact"
+    assert backend.target is not None
+    assert backend.target.id == "exact"
+    assert target_fetcher.endpoints == ["http://settings"]
+    assert target_fetcher.http_timeouts == [pytest.approx(1.25)]
+    assert runtime_connector.websocket_urls == ["ws://exact"]
+    assert runtime_connector.runtime_timeouts == [pytest.approx(2.5)]
+
+
+def test_backend_constructor_has_one_settings_path() -> None:
+    signature = inspect.signature(CodexAppCdpBackend)
+
+    assert "settings" in signature.parameters
+    assert "endpoint" not in signature.parameters
 
 
 def test_client_default_connector_uses_keyword_runtime_timeout(
@@ -245,25 +279,35 @@ def test_client_default_connector_uses_keyword_runtime_timeout(
             assert max_size is None
             return websocket
 
-    async def target_fetcher(received_settings: CodexAppCdpSettings) -> tuple[CdpTarget, ...]:
-        await asyncio.sleep(0)
-        assert received_settings is settings
-        return (
-            CdpTarget(
-                id="target",
-                kind="page",
-                url="app://-/index.html",
-                websocket_debugger_url="ws://target",
-            ),
-        )
+    class TargetFetcher(CdpTargetFetcher):
+        @override
+        async def fetch(
+            self,
+            endpoint: str = "http://127.0.0.1:9222",
+            *,
+            http_timeout: float = 10.0,
+        ) -> tuple[CdpTarget, ...]:
+            await asyncio.sleep(0)
+            assert endpoint == "http://cdp"
+            assert http_timeout == pytest.approx(10.0)
+            return (
+                CdpTarget(
+                    id="target",
+                    kind="page",
+                    url="app://-/index.html",
+                    websocket_debugger_url="ws://target",
+                ),
+            )
 
     monkeypatch.setattr(cdp_runtime, "import_module", lambda _name: FakeWebsocketsModule())
-    client = CodexAppCdpClient(settings=settings, target_fetcher=target_fetcher)
+    backend = CodexAppCdpBackend(settings=settings, target_fetcher=TargetFetcher())
+    client = AsyncCodexApp(backend=backend)
 
     asyncio.run(client.connect())
 
-    assert client._runtime is not None
-    assert client._runtime._timeout == pytest.approx(0.125)
+    connected_runtime = backend.runtime
+    assert isinstance(connected_runtime, cdp_runtime.CdpRuntimeConnection)
+    assert connected_runtime._timeout == pytest.approx(0.125)
 
 
 def test_wrapper_rejects_missing_discovered_tool() -> None:
@@ -282,17 +326,60 @@ def test_wrapper_rejects_missing_discovered_tool() -> None:
 
 
 def test_invoke_tool_rejects_missing_runtime_after_connect() -> None:
-    class BrokenClient(CodexAppCdpClient):
-        async def connect(self) -> BrokenClient:
+    class BrokenBackend(CodexAppCdpBackend):
+        async def connect(self) -> BrokenBackend:
             await asyncio.sleep(0)
             return self
 
     async def run_client() -> None:
-        client = BrokenClient()
+        backend = BrokenBackend()
         with pytest.raises(CodexAppCdpConnectionError, match="not connected"):
-            await client._invoke_tool("list_threads", {})
+            await backend.invoke_tool("list_threads", {})
 
     asyncio.run(run_client())
+
+
+def test_backend_closes_runtime_after_discovery_failure_and_can_retry() -> None:
+    failed_runtime = FakeRuntime(responses=["bad discovery"])
+    retry_runtime = FakeRuntime(responses=[discovery_result(ALL_CODEX_APP_THREAD_TOOL_NAMES)])
+
+    class SequentialRuntimeConnector(CdpRuntimeConnector):
+        def __init__(self) -> None:
+            self._runtimes = [failed_runtime, retry_runtime]
+
+        async def connect(
+            self,
+            websocket_url: str,
+            *,
+            runtime_timeout: float = 30.0,
+        ) -> CdpRuntime:
+            await asyncio.sleep(0)
+            assert websocket_url == "ws://target"
+            assert runtime_timeout == pytest.approx(30.0)
+            return self._runtimes.pop(0)
+
+    backend = CodexAppCdpBackend(
+        settings=CodexAppCdpSettings(endpoint="http://cdp"),
+        target_fetcher=FakeTargetFetcher(),
+        runtime_connector=SequentialRuntimeConnector(),
+    )
+
+    with pytest.raises(CodexAppCdpDiscoveryError, match="JSON object"):
+        asyncio.run(backend.connect())
+
+    assert failed_runtime.closed
+    runtime_after_failure = backend.runtime
+    discovery_after_failure = backend.tool_discovery
+    assert runtime_after_failure is None
+    assert discovery_after_failure is None
+
+    asyncio.run(backend.connect())
+
+    runtime_after_retry = backend.runtime
+    discovery_after_retry = backend.tool_discovery
+    assert runtime_after_retry is not None
+    assert retry_runtime.expressions
+    assert discovery_after_retry is not None
 
 
 def test_mutating_wrappers_translate_to_renderer_payloads() -> None:
