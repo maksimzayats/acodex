@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 from typing import get_type_hints
 
@@ -72,6 +73,12 @@ def test_public_read_thread_signature_is_snake_case() -> None:
     assert "turnLimit" not in read_thread_keys
     assert "includeOutputs" not in read_thread_keys
     assert "maxOutputCharsPerItem" not in read_thread_keys
+
+
+def test_client_constructor_does_not_store_source_thread_context() -> None:
+    signature = inspect.signature(CodexAppCdpClient)
+
+    assert "source_thread_id" not in signature.parameters
 
 
 def test_read_only_wrappers_translate_to_renderer_payload() -> None:
@@ -329,6 +336,7 @@ def test_mutating_wrappers_translate_to_renderer_payloads() -> None:
             thinking="medium",
         )
         fork_result = await client.fork_thread(
+            source_thread_id="source-thread",
             thread_id="thread-1",
             environment={"type": "same-directory"},
         )
@@ -381,6 +389,8 @@ def test_mutating_wrappers_translate_to_renderer_payloads() -> None:
     assert '"model":"gpt-5.5"' in runtime.expressions[2]
     assert '"thinking":"medium"' in runtime.expressions[2]
     assert '"environment":{"type":"same-directory"}' in runtime.expressions[3]
+    assert '"source-thread"' in runtime.expressions[3]
+    assert "source_thread_id" not in runtime.expressions[3]
     assert '"pinned":true' in runtime.expressions[4]
     assert '"archived":false' in runtime.expressions[5]
     assert '"title":"New title"' in runtime.expressions[6]

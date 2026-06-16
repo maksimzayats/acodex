@@ -14,7 +14,13 @@ ToolOutputT = TypeVar("ToolOutputT", bound=BaseModel)
 
 
 class AsyncRendererToolInvoker(Protocol):
-    async def __call__(self, tool_name: str, arguments: JsonObject) -> JsonValue:
+    async def __call__(
+        self,
+        tool_name: str,
+        arguments: JsonObject,
+        *,
+        source_thread_id: str | None = None,
+    ) -> JsonValue:
         """Invoke a renderer tool with an already serialized JSON object.
 
         Returns:
@@ -50,9 +56,18 @@ class BaseAsyncTool(Generic[ToolOutputT]):
     def __init__(self, invoker: AsyncRendererToolInvoker) -> None:
         self._invoker = invoker
 
-    async def _invoke(self, arguments: object) -> ToolOutputT:
+    async def _invoke(
+        self,
+        arguments: object,
+        *,
+        source_thread_id: str | None = None,
+    ) -> ToolOutputT:
         renderer_payload = dump_tool_input(self.INPUT_TYPE, arguments)
-        result = await self._invoker(self.NAME, renderer_payload)
+        result = await self._invoker(
+            self.NAME,
+            renderer_payload,
+            source_thread_id=source_thread_id,
+        )
         return parse_tool_output(self.OUTPUT_TYPE, result)
 
 

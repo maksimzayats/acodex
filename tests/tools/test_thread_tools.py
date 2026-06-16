@@ -60,7 +60,7 @@ from acodex.asyncio.tools.set_thread_title import (
 )
 from acodex.asyncio.tools.thread_tools import CodexAppThreadTools
 
-ToolCase = tuple[type, type, type, dict[str, Any], JsonObject, JsonObject, JsonObject]
+ToolCase = tuple[type, type, type, dict[str, Any], str | None, JsonObject, JsonObject, JsonObject]
 
 
 def renderer_success(value: JsonValue) -> JsonObject:
@@ -84,10 +84,16 @@ def default_tool_result() -> JsonValue:
 @dataclass(slots=True)
 class RecordingInvoker:
     result: JsonValue = field(default_factory=default_tool_result)
-    calls: list[tuple[str, JsonObject]] = field(default_factory=list)
+    calls: list[tuple[str, JsonObject, str | None]] = field(default_factory=list)
 
-    async def __call__(self, tool_name: str, arguments: JsonObject) -> JsonValue:
-        self.calls.append((tool_name, arguments))
+    async def __call__(
+        self,
+        tool_name: str,
+        arguments: JsonObject,
+        *,
+        source_thread_id: str | None = None,
+    ) -> JsonValue:
+        self.calls.append((tool_name, arguments, source_thread_id))
         return self.result
 
 
@@ -143,6 +149,7 @@ TOOL_CASES: tuple[ToolCase, ...] = (
         ListThreadsToolInput,
         ListThreadsToolOutput,
         {"limit": 5},
+        None,
         {"limit": 5},
         LIST_THREADS_OUTPUT,
         {
@@ -172,6 +179,7 @@ TOOL_CASES: tuple[ToolCase, ...] = (
             "max_output_chars_per_item": 120,
             "turn_limit": 4,
         },
+        None,
         {
             "threadId": "thread-1",
             "cursor": "cursor-1",
@@ -223,6 +231,7 @@ TOOL_CASES: tuple[ToolCase, ...] = (
         CreateThreadToolInput,
         CreateThreadToolOutput,
         {"prompt": "start", "target": {"type": "projectless"}, "thinking": "medium"},
+        None,
         {"prompt": "start", "target": {"type": "projectless"}, "thinking": "medium"},
         {"threadId": "thread-1", "projectlessOutputDirectory": "/repo/output/thread-1"},
         {
@@ -236,6 +245,7 @@ TOOL_CASES: tuple[ToolCase, ...] = (
         SendMessageToThreadToolInput,
         SendMessageToThreadToolOutput,
         {"thread_id": "thread-1", "prompt": "continue", "model": "gpt-5.5"},
+        None,
         {"threadId": "thread-1", "prompt": "continue", "model": "gpt-5.5"},
         {"threadId": "thread-1"},
         {"thread_id": "thread-1"},
@@ -245,6 +255,7 @@ TOOL_CASES: tuple[ToolCase, ...] = (
         ForkThreadToolInput,
         ForkThreadToolOutput,
         {"thread_id": "thread-1", "environment": {"type": "same-directory"}},
+        "source-thread",
         {"threadId": "thread-1", "environment": {"type": "same-directory"}},
         {
             "environment": {"type": "same-directory"},
@@ -265,6 +276,7 @@ TOOL_CASES: tuple[ToolCase, ...] = (
         SetThreadPinnedToolInput,
         SetThreadPinnedToolOutput,
         {"thread_id": "thread-1", "pinned": True},
+        None,
         {"threadId": "thread-1", "pinned": True},
         {"threadId": "thread-1", "pinned": True},
         {"thread_id": "thread-1", "pinned": True},
@@ -274,6 +286,7 @@ TOOL_CASES: tuple[ToolCase, ...] = (
         SetThreadArchivedToolInput,
         SetThreadArchivedToolOutput,
         {"thread_id": "thread-1", "archived": False},
+        None,
         {"threadId": "thread-1", "archived": False},
         {"threadId": "thread-1", "archived": False},
         {"thread_id": "thread-1", "archived": False},
@@ -283,6 +296,7 @@ TOOL_CASES: tuple[ToolCase, ...] = (
         SetThreadTitleToolInput,
         SetThreadTitleToolOutput,
         {"thread_id": "thread-1", "title": "New title"},
+        None,
         {"threadId": "thread-1", "title": "New title"},
         {"threadId": "thread-1", "title": "New title"},
         {"thread_id": "thread-1", "title": "New title"},
@@ -292,6 +306,7 @@ TOOL_CASES: tuple[ToolCase, ...] = (
         HandoffThreadToolInput,
         HandoffThreadToolOutput,
         {"thread_id": "thread-1", "destination_host_id": "local"},
+        None,
         {"threadId": "thread-1", "destinationHostId": "local"},
         {
             "destinationHostDisplayName": "Local",
@@ -309,18 +324,29 @@ TOOL_CASES: tuple[ToolCase, ...] = (
 
 @pytest.mark.parametrize("case", TOOL_CASES)
 def test_tool_invocation_dumps_aliases_and_parses_output_model(case: ToolCase) -> None:
-    tool_type, input_type, output_type, arguments, renderer_payload, output, expected_dump = case
+    (
+        tool_type,
+        input_type,
+        output_type,
+        arguments,
+        source_thread_id,
+        renderer_payload,
+        output,
+        expected_dump,
+    ) = case
     invoker = RecordingInvoker(result=renderer_success(output))
     tool = tool_type(invoker)
 
     async def run_tool() -> Any:
+        if source_thread_id is not None:
+            return await tool(source_thread_id=source_thread_id, **arguments)
         return await tool(**arguments)
 
     result = asyncio.run(run_tool())
 
     assert isinstance(result, output_type)
     assert result.model_dump() == expected_dump
-    assert invoker.calls == [(tool.NAME, renderer_payload)]
+    assert invoker.calls == [(tool.NAME, renderer_payload, source_thread_id)]
     assert tool.INPUT_TYPE is input_type
     assert tool.OUTPUT_TYPE is output_type
 
@@ -362,6 +388,16 @@ def test_read_thread_tool_input_and_signature_are_snake_case() -> None:
     assert "turnLimit" not in read_thread_keys
     assert "includeOutputs" not in read_thread_keys
     assert "maxOutputCharsPerItem" not in read_thread_keys
+
+
+def test_fork_thread_source_context_is_not_renderer_payload() -> None:
+    type_hints = get_type_hints(ForkThreadTool.__call__, include_extras=True)
+    fork_thread_keys = ForkThreadToolInput.__annotations__.keys()
+
+    assert type_hints["source_thread_id"] is str
+    assert type_hints["arguments"] == Unpack[ForkThreadToolInput]
+    assert "source_thread_id" not in fork_thread_keys
+    assert "sourceThreadId" not in fork_thread_keys
 
 
 def test_read_thread_output_covers_renderer_item_variants() -> None:

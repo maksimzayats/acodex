@@ -51,6 +51,8 @@ class ForkThreadTool(BaseAsyncTool[ForkThreadToolOutput]):
 
     async def __call__(
         self,
+        *,
+        source_thread_id: str,
         **arguments: Unpack[ForkThreadToolInput],
     ) -> ForkThreadToolOutput:
         """Fork a Codex desktop thread.
@@ -59,4 +61,4 @@ class ForkThreadTool(BaseAsyncTool[ForkThreadToolOutput]):
             A typed output model wrapping the renderer-native result.
 
         """
-        return await self._invoke(arguments)
+        return await self._invoke(arguments, source_thread_id=source_thread_id)

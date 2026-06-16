@@ -60,7 +60,6 @@ class CodexAppCdpClient:
         endpoint: str | None = None,
         *,
         settings: CodexAppCdpSettings | None = None,
-        source_thread_id: str | None = None,
         target_fetcher: _TargetFetcher | None = None,
         runtime_connector: _RuntimeConnector | None = None,
     ) -> None:
@@ -68,7 +67,6 @@ class CodexAppCdpClient:
         if endpoint is not None:
             resolved_settings = resolved_settings.model_copy(update={"endpoint": endpoint})
         self.settings = resolved_settings
-        self.source_thread_id = source_thread_id
         self.target: CdpTarget | None = None
         self.tool_discovery: CodexAppToolDiscovery | None = None
         self._target_fetcher = target_fetcher or _fetch_targets_for_settings
@@ -169,6 +167,8 @@ class CodexAppCdpClient:
 
     async def fork_thread(
         self,
+        *,
+        source_thread_id: str,
         **arguments: Unpack[ForkThreadToolInput],
     ) -> ForkThreadToolOutput:
         """Fork a Codex desktop thread.
@@ -177,7 +177,7 @@ class CodexAppCdpClient:
             A typed output model wrapping the renderer-native result.
 
         """
-        return await self.tools.fork_thread(**arguments)
+        return await self.tools.fork_thread(source_thread_id=source_thread_id, **arguments)
 
     async def set_thread_pinned(
         self,
@@ -227,7 +227,13 @@ class CodexAppCdpClient:
         """
         return await self.tools.handoff_thread(**arguments)
 
-    async def _invoke_tool(self, tool_name: str, arguments: JsonObject) -> JsonValue:
+    async def _invoke_tool(
+        self,
+        tool_name: str,
+        arguments: JsonObject,
+        *,
+        source_thread_id: str | None = None,
+    ) -> JsonValue:
         if self._runtime is None:
             await self.connect()
         if self.tool_discovery is not None and tool_name not in self.tool_discovery.tool_names:
@@ -241,7 +247,7 @@ class CodexAppCdpClient:
             build_tool_invocation_expression(
                 tool_name,
                 arguments,
-                source_thread_id=self.source_thread_id,
+                source_thread_id=source_thread_id,
             ),
         )
 

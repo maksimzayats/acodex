@@ -112,7 +112,6 @@ def client_with_runtime(runtime: FakeRuntime) -> CodexAppCdpClient:
 
     return CodexAppCdpClient(
         "http://cdp",
-        source_thread_id="source-thread",
         target_fetcher=target_fetcher,
         runtime_connector=runtime_connector,
     )
