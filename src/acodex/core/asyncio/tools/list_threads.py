@@ -5,7 +5,7 @@ from typing import ClassVar, Literal
 from pydantic import Field
 from typing_extensions import NotRequired, TypedDict, Unpack
 
-from acodex.asyncio.tools.base import BaseAsyncTool, RendererToolOutput
+from acodex.core.asyncio.tools.base import BaseAsyncTool, RendererToolOutput
 
 
 class ListThreadsToolInput(TypedDict):

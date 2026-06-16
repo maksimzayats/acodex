@@ -12,7 +12,7 @@ from acodex import (
     JsonObject,
     parse_runtime_evaluate_response,
 )
-from acodex.asyncio.cdp import json_utils as cdp_json, runtime as cdp_runtime
+from acodex.core.asyncio.cdp import json_utils as cdp_json, runtime as cdp_runtime
 from tests.cdp.helpers import FakeWebSocket
 
 

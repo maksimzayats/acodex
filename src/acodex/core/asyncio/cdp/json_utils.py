@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any, Final
 
-from acodex.asyncio.cdp.errors import CodexAppCdpProtocolError
-from acodex.asyncio.cdp.types import JsonObject, JsonValue
+from acodex.core.asyncio.cdp.errors import CodexAppCdpProtocolError
+from acodex.core.asyncio.cdp.types import JsonObject, JsonValue
 
 _JSON_COMPACT_SEPARATORS: Final = (",", ":")
 

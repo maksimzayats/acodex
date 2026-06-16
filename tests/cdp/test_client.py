@@ -17,9 +17,9 @@ from acodex import (
     CodexAppCdpSettings,
     JsonObject,
 )
-from acodex.asyncio.cdp import runtime as cdp_runtime
-from acodex.asyncio.cdp.runtime import CdpRuntimeEvaluator
-from acodex.asyncio.tools.read_thread import ReadThreadToolInput
+from acodex.core.asyncio.cdp import runtime as cdp_runtime
+from acodex.core.asyncio.cdp.runtime import CdpRuntimeEvaluator
+from acodex.core.asyncio.tools.read_thread import ReadThreadToolInput
 from tests.cdp.helpers import (
     FakeRuntime,
     FakeWebSocket,

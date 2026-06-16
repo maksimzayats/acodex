@@ -5,10 +5,10 @@ from collections.abc import Awaitable, Mapping
 from importlib import import_module
 from typing import NoReturn, Protocol, cast
 
-from acodex.asyncio.cdp.errors import CodexAppCdpEvaluationError, CodexAppCdpProtocolError
-from acodex.asyncio.cdp.json_utils import decode_json_object, dump_json
-from acodex.asyncio.cdp.settings import DEFAULT_CDP_RUNTIME_TIMEOUT
-from acodex.asyncio.cdp.types import JsonObject, JsonValue
+from acodex.core.asyncio.cdp.errors import CodexAppCdpEvaluationError, CodexAppCdpProtocolError
+from acodex.core.asyncio.cdp.json_utils import decode_json_object, dump_json
+from acodex.core.asyncio.cdp.settings import DEFAULT_CDP_RUNTIME_TIMEOUT
+from acodex.core.asyncio.cdp.types import JsonObject, JsonValue
 
 
 class CdpRuntimeEvaluator(Protocol):

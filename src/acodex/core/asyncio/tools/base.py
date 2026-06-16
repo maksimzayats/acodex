@@ -6,9 +6,9 @@ from typing import Any, ClassVar, Generic, Literal, Protocol, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
-from acodex.asyncio.cdp.errors import CodexAppCdpProtocolError
-from acodex.asyncio.cdp.json_utils import ensure_json_value
-from acodex.asyncio.cdp.types import JsonObject, JsonValue
+from acodex.core.asyncio.cdp.errors import CodexAppCdpProtocolError
+from acodex.core.asyncio.cdp.json_utils import ensure_json_value
+from acodex.core.asyncio.cdp.types import JsonObject, JsonValue
 
 ToolOutputT = TypeVar("ToolOutputT", bound=BaseModel)
 

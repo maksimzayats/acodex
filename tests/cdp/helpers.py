@@ -16,8 +16,8 @@ from acodex import (
     CodexAppCdpClient,
     CodexAppCdpSettings,
 )
-from acodex.asyncio.cdp.runtime import CdpRuntimeEvaluator
-from acodex.asyncio.cdp.types import JsonObject, JsonValue
+from acodex.core.asyncio.cdp.runtime import CdpRuntimeEvaluator
+from acodex.core.asyncio.cdp.types import JsonObject, JsonValue
 
 
 @dataclass(slots=True)

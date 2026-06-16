@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from acodex.asyncio import (
+from acodex.core.asyncio import (
     ALL_CODEX_APP_THREAD_TOOL_NAMES,
     DEFAULT_CDP_ENDPOINT,
     DEFAULT_CDP_HTTP_TIMEOUT,

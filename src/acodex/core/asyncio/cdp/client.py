@@ -6,41 +6,41 @@ from typing import Protocol, TypeAlias
 
 from typing_extensions import Self, Unpack
 
-from acodex.asyncio.cdp.errors import (
+from acodex.core.asyncio.cdp.errors import (
     CodexAppCdpConnectionError,
     CodexAppCdpDiscoveryError,
 )
-from acodex.asyncio.cdp.renderer import (
+from acodex.core.asyncio.cdp.renderer import (
     build_tool_discovery_expression,
     build_tool_invocation_expression,
     parse_tool_discovery_result,
 )
-from acodex.asyncio.cdp.runtime import CdpRuntimeEvaluator, connect_websocket_runtime
-from acodex.asyncio.cdp.settings import CodexAppCdpSettings
-from acodex.asyncio.cdp.targets import fetch_cdp_targets, select_codex_app_target
-from acodex.asyncio.cdp.types import CdpTarget, CodexAppToolDiscovery, JsonObject, JsonValue
-from acodex.asyncio.tools.create_thread import CreateThreadToolInput, CreateThreadToolOutput
-from acodex.asyncio.tools.fork_thread import ForkThreadToolInput, ForkThreadToolOutput
-from acodex.asyncio.tools.handoff_thread import HandoffThreadToolInput, HandoffThreadToolOutput
-from acodex.asyncio.tools.list_threads import ListThreadsToolInput, ListThreadsToolOutput
-from acodex.asyncio.tools.read_thread import ReadThreadToolInput, ReadThreadToolOutput
-from acodex.asyncio.tools.send_message_to_thread import (
+from acodex.core.asyncio.cdp.runtime import CdpRuntimeEvaluator, connect_websocket_runtime
+from acodex.core.asyncio.cdp.settings import CodexAppCdpSettings
+from acodex.core.asyncio.cdp.targets import fetch_cdp_targets, select_codex_app_target
+from acodex.core.asyncio.cdp.types import CdpTarget, CodexAppToolDiscovery, JsonObject, JsonValue
+from acodex.core.asyncio.tools.create_thread import CreateThreadToolInput, CreateThreadToolOutput
+from acodex.core.asyncio.tools.fork_thread import ForkThreadToolInput, ForkThreadToolOutput
+from acodex.core.asyncio.tools.handoff_thread import HandoffThreadToolInput, HandoffThreadToolOutput
+from acodex.core.asyncio.tools.list_threads import ListThreadsToolInput, ListThreadsToolOutput
+from acodex.core.asyncio.tools.read_thread import ReadThreadToolInput, ReadThreadToolOutput
+from acodex.core.asyncio.tools.send_message_to_thread import (
     SendMessageToThreadToolInput,
     SendMessageToThreadToolOutput,
 )
-from acodex.asyncio.tools.set_thread_archived import (
+from acodex.core.asyncio.tools.set_thread_archived import (
     SetThreadArchivedToolInput,
     SetThreadArchivedToolOutput,
 )
-from acodex.asyncio.tools.set_thread_pinned import (
+from acodex.core.asyncio.tools.set_thread_pinned import (
     SetThreadPinnedToolInput,
     SetThreadPinnedToolOutput,
 )
-from acodex.asyncio.tools.set_thread_title import (
+from acodex.core.asyncio.tools.set_thread_title import (
     SetThreadTitleToolInput,
     SetThreadTitleToolOutput,
 )
-from acodex.asyncio.tools.thread_tools import CodexAppThreadTools
+from acodex.core.asyncio.tools.thread_tools import CodexAppThreadTools
 
 _TargetFetcher: TypeAlias = Callable[[CodexAppCdpSettings], Awaitable[tuple[CdpTarget, ...]]]
 

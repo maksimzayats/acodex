@@ -5,8 +5,8 @@ from typing import Annotated, Any, ClassVar, TypeAlias
 from pydantic import Field, model_validator
 from typing_extensions import NotRequired, TypedDict, Unpack
 
-from acodex.asyncio.cdp.types import ThinkingEffort
-from acodex.asyncio.tools.base import BaseAsyncTool, RendererToolOutput
+from acodex.core.asyncio.cdp.types import ThinkingEffort
+from acodex.core.asyncio.tools.base import BaseAsyncTool, RendererToolOutput
 
 # Target schemas are open-ended renderer payloads; JSON validation happens after dump.
 RendererJsonObject: TypeAlias = dict[str, Any]

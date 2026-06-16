@@ -5,8 +5,8 @@ from typing import Annotated, ClassVar
 from pydantic import Field
 from typing_extensions import NotRequired, TypedDict, Unpack
 
-from acodex.asyncio.cdp.types import ThinkingEffort
-from acodex.asyncio.tools.base import BaseAsyncTool, RendererToolOutput
+from acodex.core.asyncio.cdp.types import ThinkingEffort
+from acodex.core.asyncio.tools.base import BaseAsyncTool, RendererToolOutput
 
 
 class SendMessageToThreadToolInput(TypedDict):

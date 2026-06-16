@@ -12,7 +12,7 @@ from acodex import (
     parse_cdp_targets,
     select_codex_app_target,
 )
-from acodex.asyncio.cdp import targets as cdp_targets
+from acodex.core.asyncio.cdp import targets as cdp_targets
 from tests.cdp.helpers import JsonServer
 
 

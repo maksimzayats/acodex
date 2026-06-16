@@ -5,15 +5,15 @@ from collections.abc import Mapping, Sequence
 from http.client import HTTPConnection, HTTPSConnection
 from urllib.parse import urlparse
 
-from acodex.asyncio.cdp.errors import CodexAppCdpConnectionError, CodexAppCdpProtocolError
-from acodex.asyncio.cdp.json_utils import decode_json_value
-from acodex.asyncio.cdp.settings import (
+from acodex.core.asyncio.cdp.errors import CodexAppCdpConnectionError, CodexAppCdpProtocolError
+from acodex.core.asyncio.cdp.json_utils import decode_json_value
+from acodex.core.asyncio.cdp.settings import (
     DEFAULT_CDP_ENDPOINT,
     DEFAULT_CDP_HTTP_TIMEOUT,
     DEFAULT_CDP_TARGET_URL,
     DEFAULT_CDP_TARGET_URL_PREFIX,
 )
-from acodex.asyncio.cdp.types import CdpTarget, JsonValue
+from acodex.core.asyncio.cdp.types import CdpTarget, JsonValue
 
 _HTTP_ERROR_STATUS = 400
 

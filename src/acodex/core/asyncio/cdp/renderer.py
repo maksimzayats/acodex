@@ -3,9 +3,9 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Final
 
-from acodex.asyncio.cdp.errors import CodexAppCdpDiscoveryError
-from acodex.asyncio.cdp.json_utils import dump_json
-from acodex.asyncio.cdp.types import CodexAppToolDiscovery, JsonObject, JsonValue
+from acodex.core.asyncio.cdp.errors import CodexAppCdpDiscoveryError
+from acodex.core.asyncio.cdp.json_utils import dump_json
+from acodex.core.asyncio.cdp.types import CodexAppToolDiscovery, JsonObject, JsonValue
 
 _DISCOVERY_GLOBAL_KEY: Final = "__acodexCdpBackendV2"
 
