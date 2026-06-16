@@ -3,7 +3,7 @@ name = "acodex"
 dynamic = ["version"]
 description = "Python client experiments for Codex desktop app automation."
 readme = "README.md"
-license = "Apache-2.0"
+license = "MIT"
 requires-python = ">=3.10"
 authors = [{ name = "Maksim Zayats", email = "maksim@zayats.dev" }]
 keywords = ["codex", "openai", "sdk", "cli", "agents", "automation", "streaming", "jsonl"]
@@ -11,7 +11,7 @@ classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
+    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
