@@ -170,10 +170,9 @@ class CodexAppManager:
             Matching process information, if found.
 
         """
-        app_name = Path(app_path).name
+        executable_paths = _codex_executable_paths(app_path)
         for process in self.system_ops.list_processes():
-            command = process.command
-            if app_name in command or "Codex.app" in command or "/Codex" in command:
+            if _is_codex_app_process(process.command, executable_paths):
                 return process
         return None
 
@@ -190,3 +189,21 @@ def detect_cdp_port(command: str) -> int | None:
     if match is None:
         return None
     return int(match.group(1))
+
+
+def _codex_executable_paths(app_path: str) -> tuple[str, ...]:
+    app = Path(app_path)
+    executable_names = [app.stem]
+    if app.stem != "Codex":
+        executable_names.append("Codex")
+    return tuple(
+        str(app / "Contents" / "MacOS" / executable)
+        for executable in executable_names
+    )
+
+
+def _is_codex_app_process(command: str, executable_paths: tuple[str, ...]) -> bool:
+    return any(
+        command == executable or command.startswith(f"{executable} ")
+        for executable in executable_paths
+    )

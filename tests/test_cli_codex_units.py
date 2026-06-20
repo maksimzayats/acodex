@@ -67,7 +67,10 @@ def test_detect_cdp_port() -> None:
 
 def test_status_reports_process_and_cdp() -> None:
     ops = FakeSystemOps([
-        ProcessInfo(pid=42, command="/Applications/Codex.app --remote-debugging-port=5633"),
+        ProcessInfo(
+            pid=42,
+            command="/Applications/Codex.app/Contents/MacOS/Codex --remote-debugging-port=5633",
+        ),
     ])
     probe = FakeCDPProbe([True])
     manager = CodexAppManager(system_ops=ops, cdp_probe=probe, poll_interval=0.0)
@@ -83,7 +86,12 @@ def test_status_reports_process_and_cdp() -> None:
 
 
 def test_relaunch_noops_when_port_matches() -> None:
-    ops = FakeSystemOps([ProcessInfo(pid=1, command="Codex.app --remote-debugging-port=5633")])
+    ops = FakeSystemOps([
+        ProcessInfo(
+            pid=1,
+            command="/Applications/Codex.app/Contents/MacOS/Codex --remote-debugging-port=5633",
+        ),
+    ])
     manager = CodexAppManager(system_ops=ops, cdp_probe=FakeCDPProbe(), poll_interval=0.0)
 
     assert (
@@ -93,8 +101,14 @@ def test_relaunch_noops_when_port_matches() -> None:
 
 
 def test_relaunch_requires_confirmation_and_restarts() -> None:
-    ops = FakeSystemOps([ProcessInfo(pid=1, command="Codex.app")])
-    manager = CodexAppManager(system_ops=ops, cdp_probe=FakeCDPProbe([True]), poll_interval=0.0)
+    ops = FakeSystemOps([
+        ProcessInfo(pid=1, command="/Applications/Codex.app/Contents/MacOS/Codex"),
+    ])
+    manager = CodexAppManager(
+        system_ops=ops,
+        cdp_probe=FakeCDPProbe([True]),
+        poll_interval=0.0,
+    )
 
     with pytest.raises(CodexAppError, match="without the configured"):
         manager.relaunch(config(), confirmed=False)
@@ -120,16 +134,54 @@ def test_find_codex_process_matches_variants() -> None:
         system_ops=FakeSystemOps(
             [
                 ProcessInfo(pid=1, command="python something"),
-                ProcessInfo(pid=2, command="/Applications/Other.app/Contents/MacOS/Codex"),
+                ProcessInfo(pid=2, command="/Users/me/Documents/Codex/other-process"),
+                ProcessInfo(
+                    pid=3,
+                    command=(
+                        "/Applications/Codex.app/Contents/Resources/codex app-server "
+                        "--analytics-default-enabled"
+                    ),
+                ),
+                ProcessInfo(
+                    pid=4,
+                    command="/Applications/Codex.app/Contents/MacOS/Codex --flag",
+                ),
             ],
         ),
     )
     process = manager.find_codex_process("/Applications/Codex.app")
     assert process is not None
-    assert process.pid == 2
+    assert process.pid == 4
 
-    missing = CodexAppManager(system_ops=FakeSystemOps([ProcessInfo(pid=1, command="python")]))
+    missing = CodexAppManager(
+        system_ops=FakeSystemOps(
+            [
+                ProcessInfo(pid=1, command="python"),
+                ProcessInfo(
+                    pid=2,
+                    command="/Applications/Codex.app/Contents/Resources/codex app-server",
+                ),
+                ProcessInfo(pid=3, command="/Applications/Other.app/Contents/MacOS/Codex"),
+            ],
+        ),
+    )
     assert missing.find_codex_process("/Applications/Codex.app") is None
+
+
+def test_relaunch_ignores_stale_codex_helper_processes() -> None:
+    ops = FakeSystemOps(
+        [
+            ProcessInfo(
+                pid=1,
+                command="/Applications/Codex.app/Contents/Resources/codex app-server",
+            ),
+        ],
+    )
+    manager = CodexAppManager(system_ops=ops, cdp_probe=FakeCDPProbe([True]), poll_interval=0.0)
+
+    assert manager.relaunch(config(), confirmed=False) == "Codex launched with CDP port 5633"
+    assert ops.quit_calls == 0
+    assert ops.launched == [("/Applications/Codex.app", 5633)]
 
 
 def test_system_ops_and_cdp_probe(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

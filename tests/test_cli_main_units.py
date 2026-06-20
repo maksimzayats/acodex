@@ -26,6 +26,24 @@ class FakeDoctor:
         }
 
 
+class FakeDoctorWithFix:
+    def run(self, *, deep: bool) -> dict[str, Any]:
+        return {
+            "ok": True,
+            "checks": [
+                {
+                    "name": "server",
+                    "status": "warn",
+                    "detail": "http://127.0.0.1:8765",
+                    "fix": {
+                        "summary": "Start the managed acodex HTTP server.",
+                        "command": "acodex server start",
+                    },
+                },
+            ],
+        }
+
+
 class FakeCodexManager:
     def __init__(self) -> None:
         self.relaunch_confirmed: bool | None = None
@@ -111,11 +129,25 @@ def test_doctor_outputs(monkeypatch: pytest.MonkeyPatch) -> None:
 
     human = runner.invoke(cli.app, ["doctor"])
     assert human.exit_code == 0
-    assert "PASS config" in human.stdout
+    assert "acodex doctor" in human.stdout
+    assert "PASS" in human.stdout
+    assert "config" in human.stdout
+    assert "All 1 check passed" in human.stdout
 
     as_json = runner.invoke(cli.app, ["doctor", "--json", "--deep"])
     assert as_json.exit_code == 1
     assert json.loads(as_json.stdout)["ok"] is False
+
+
+def test_doctor_outputs_suggested_fixes(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli, "Doctor", FakeDoctorWithFix)
+
+    result = runner.invoke(cli.app, ["doctor"])
+
+    assert result.exit_code == 0
+    assert "Suggested fixes" in result.stdout
+    assert "Start the managed acodex HTTP server" in result.stdout
+    assert "acodex server start" in result.stdout
 
 
 def test_codex_status_and_relaunch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -126,7 +158,9 @@ def test_codex_status_and_relaunch(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 
     status = runner.invoke(cli.app, ["codex", "status"])
     assert status.exit_code == 0
-    assert "running: True" in status.stdout
+    assert "Codex App Status" in status.stdout
+    assert "Running" in status.stdout
+    assert "CDP is not reachable" in status.stdout
 
     denied = runner.invoke(cli.app, ["codex", "relaunch"], input="n\n")
     assert denied.exit_code == 1
@@ -155,7 +189,9 @@ def test_server_commands(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Non
 
     start = runner.invoke(cli.app, ["server", "start", "--host", "127.0.0.2", "--port", "9000"])
     assert start.exit_code == 0
-    assert "HTTP: http://127.0.0.2:9000" in start.stdout
+    assert "Managed Server Started" in start.stdout
+    assert "HTTP" in start.stdout
+    assert "http://127.0.0.2:9000" in start.stdout
 
     failed = runner.invoke(cli.app, ["server", "start", "--host", "fail"])
     assert failed.exit_code == 1
@@ -167,16 +203,17 @@ def test_server_commands(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Non
 
     status = runner.invoke(cli.app, ["server", "status"])
     assert status.exit_code == 0
-    assert "unreachable" in status.stdout
+    assert "Unreachable" in status.stdout
 
     status_json = runner.invoke(cli.app, ["server", "status", "--json"])
     assert json.loads(status_json.stdout)["running"] is True
 
     logs = runner.invoke(cli.app, ["server", "logs", "--tail", "1"])
-    assert logs.stdout.strip() == "last"
+    assert "Server logs" in logs.stdout
+    assert "last" in logs.stdout
 
     no_logs = runner.invoke(cli.app, ["server", "logs"])
-    assert "No log file found" in no_logs.stdout
+    assert "No server log file found" in no_logs.stdout
 
 
 def test_server_stop_error_and_not_running_status(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -196,7 +233,7 @@ def test_server_stop_error_and_not_running_status(monkeypatch: pytest.MonkeyPatc
 
     status = runner.invoke(cli.app, ["server", "status"])
     assert status.exit_code == 0
-    assert "not running" in status.stdout
+    assert "Not running" in status.stdout
 
 
 def test_main_invokes_app(monkeypatch: pytest.MonkeyPatch) -> None:

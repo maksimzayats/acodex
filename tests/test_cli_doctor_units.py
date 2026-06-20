@@ -85,6 +85,11 @@ def test_doctor_warns_without_running_services(tmp_path: Path) -> None:
     assert statuses["codex-app"] == "warn"
     assert statuses["server"] == "warn"
     assert "server-mcp" not in statuses
+    fixes = {check["name"]: check.get("fix") for check in result["checks"]}
+    assert fixes["codex-app"]["command"].startswith("ACODEX_CODEX_APP_PATH=")
+    assert fixes["server"]["command"] == (
+        "acodex server start --host 127.0.0.1 --port 8765"
+    )
 
 
 def test_doctor_fails_invalid_config(tmp_path: Path) -> None:
@@ -96,6 +101,7 @@ def test_doctor_fails_invalid_config(tmp_path: Path) -> None:
     assert result["ok"] is False
     assert result["checks"][0]["name"] == "config"
     assert result["checks"][0]["status"] == "fail"
+    assert result["checks"][0]["fix"]["command"].endswith("&& acodex config init")
 
 
 def test_doctor_default_server_manager_and_directory_failure(
@@ -112,3 +118,6 @@ def test_doctor_default_server_manager_and_directory_failure(
     )
     check = _check_writable_directory("bad-dir", tmp_path / "blocked")
     assert check.status == "fail"
+    assert check.fix is not None
+    assert check.fix.command is not None
+    assert check.fix.command.startswith("mkdir -p")

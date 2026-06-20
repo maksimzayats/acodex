@@ -30,6 +30,7 @@ dependencies = [
     "fastapi[standard]>=0.138.0",
     "fastmcp>=3.4.2",
     "pydantic-settings>=2.14.1",
+    "rich>=15.0.0",
     "typer>=0.26.7",
     "typing-extensions>=4.15.0",
     "websockets>=15.0",
