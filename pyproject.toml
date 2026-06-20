@@ -26,6 +26,11 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
+    "diwire>=1.4.2",
+    "fastapi[standard]>=0.138.0",
+    "fastmcp>=3.4.2",
+    "pydantic-settings>=2.14.1",
+    "typer>=0.26.7",
     "typing-extensions>=4.15.0",
     "websockets>=15.0",
 ]
@@ -36,17 +41,6 @@ Repository = "https://github.com/maksimzayats/acodex"
 Issues = "https://github.com/maksimzayats/acodex/issues"
 Documentation = "https://docs.acodex.dev"
 Changelog = "https://github.com/maksimzayats/acodex/releases"
-
-[project.optional-dependencies]
-http = [
-    "mcp>=1.27.2",
-]
-mcp = [
-    "mcp>=1.27.2",
-]
-
-[project.scripts]
-acodex-mcp = "acodex.adapters.mcp:main"
 
 [dependency-groups]
 dev = [
@@ -69,6 +63,9 @@ source = "uv-dynamic-versioning"
 [tool.uv-dynamic-versioning]
 vcs = "git"
 style = "pep440"
+
+[tool.fastapi]
+entrypoint = "acodex.http.app:app"
 
 [tool.uv]
 cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true, tags = true } }]

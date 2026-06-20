@@ -60,6 +60,35 @@ asyncio.run(main())
 - Configuration through `CodexAppCdpSettings` and `ACODEX_*` environment
   variables when the default CDP endpoint is not enough.
 
+## MITM JSONL recorder
+
+acodex also ships a mitmproxy addon that records traffic as JSONL. It logs HTTP
+requests and responses, parsed Server-Sent Events, WebSocket messages, TCP, UDP,
+and DNS flows.
+
+```sh
+acodex-mitm-jsonl --output traffic.jsonl --listen-port 8080
+```
+
+Or load the addon directly with mitmproxy:
+
+```sh
+mitmdump -s src/acodex/proxy/jsonl_recorder.py \
+  --set jsonl_path=traffic.jsonl
+```
+
+Useful options:
+
+```sh
+acodex-mitm-jsonl --stream-all-http --body-limit -1 --output traffic.jsonl
+acodex-mitm-jsonl --no-content --output metadata-only.jsonl
+```
+
+For HTTPS traffic, install the mitmproxy CA certificate in the client you are
+proxying. WebSockets are recorded from mitmproxy's WebSocket hooks. SSE responses
+are streamed by default so long-lived event streams emit JSONL records before the
+HTTP response ends.
+
 ## Why acodex
 
 Codex desktop is most useful when it can stay close to local project context,
