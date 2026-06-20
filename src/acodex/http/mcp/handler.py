@@ -1,12 +1,13 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Any
 
 from diwire import Injected
-from mcp import JSONRPCResponse, JSONRPCError, ErrorData
+from mcp import ErrorData, JSONRPCError, JSONRPCResponse
 from mcp.types import JSONRPCNotification, JSONRPCRequest
 
 from acodex.core.codex_app.bridge import CodexAppBridge
-
 
 MCP_PROTOCOL_VERSION = "2025-06-18"
 SUPPORTED_PROTOCOL_VERSIONS = {"2025-06-18", "2025-03-26", "2024-11-05"}
@@ -16,11 +17,11 @@ SUPPORTED_PROTOCOL_VERSIONS = {"2025-06-18", "2025-03-26", "2024-11-05"}
 class MCPRequestsHandler:
     _codex_app_bridge: Injected[CodexAppBridge]
 
-    async def handle_mcp_jsonrpc_message(
+    async def handle_mcp_jsonrpc_message(  # noqa: PLR0911
         self,
         message: JSONRPCRequest | JSONRPCNotification,
     ) -> JSONRPCResponse | JSONRPCError | JSONRPCNotification | None:
-        try:
+        try:  # noqa: PLW0717  # refactor later
             if message.method == "initialize":
                 result = self._get_initialize_result(params=message.params)
             elif message.method == "notifications/initialized":
@@ -53,7 +54,7 @@ class MCPRequestsHandler:
                 error=ErrorData(
                     code=-32602,
                     message=str(exc),
-                )
+                ),
             )
         except Exception as exc:  # noqa: BLE001 - surfaced as JSON-RPC internal error.
             if isinstance(message, JSONRPCNotification):
@@ -65,7 +66,7 @@ class MCPRequestsHandler:
                 error=ErrorData(
                     code=-32603,
                     message=str(exc),
-                )
+                ),
             )
 
         if isinstance(message, JSONRPCNotification):
@@ -81,7 +82,9 @@ class MCPRequestsHandler:
     def _get_initialize_result(params: Any) -> dict[str, Any]:
         requested_version = params.get("protocolVersion") if isinstance(params, dict) else None
         protocol_version = (
-            requested_version if requested_version in SUPPORTED_PROTOCOL_VERSIONS else MCP_PROTOCOL_VERSION
+            requested_version
+            if requested_version in SUPPORTED_PROTOCOL_VERSIONS
+            else MCP_PROTOCOL_VERSION
         )
         return {
             "protocolVersion": protocol_version,
@@ -98,8 +101,6 @@ class MCPRequestsHandler:
             ),
         }
 
-    async def _tools_list(self) -> dict[str, Any]:
-        ...
+    async def _tools_list(self) -> dict[str, Any]: ...
 
-    async def _tools_call(self, params: Any) -> dict[str, Any]:
-        ...
+    async def _tools_call(self, params: Any) -> dict[str, Any]: ...

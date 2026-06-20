@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Any
 
@@ -19,12 +21,10 @@ class CodexAppBridge:
     _cdp: Injected[CodexCDPClient]
     _settings: Injected[CodexAppBridgeSettings]
 
-    async def list_tools(self) -> list[dict[str, Any]]:
-        ...
+    async def list_tools(self) -> list[dict[str, Any]]: ...
 
     async def call_tool(
         self,
         name: str,
         arguments: dict[str, Any] | None,
-    ) -> dict[str, Any]:
-        ...
+    ) -> dict[str, Any]: ...
