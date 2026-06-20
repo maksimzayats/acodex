@@ -127,7 +127,7 @@ class MCPRequestsHandler:
                 "tools": {"listChanged": True},
             },
             "serverInfo": {
-                "name": "o3-os-codex-app-mcp",
+                "name": "acodex-app-mcp",
                 "version": "0.1.0",
             },
             "instructions": (
