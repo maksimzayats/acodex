@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any
 
@@ -26,14 +27,14 @@ class MCPRequestsHandler:
     async def handle_mcp_jsonrpc_message(
         self,
         message: JSONRPCRequest | JSONRPCNotification,
-    ) -> JSONRPCResponse | JSONRPCError | JSONRPCNotification | None:
+    ) -> JSONRPCResponse | JSONRPCError | None:
         """Handle a single MCP JSON-RPC request or notification.
 
         Returns:
             A JSON-RPC response for requests, or None for notifications.
 
         """
-        try:  # refactor later
+        try:
             result = await self._dispatch_message(message)
         except _MethodNotFoundError as exc:
             return self._error_response(
@@ -42,6 +43,12 @@ class MCPRequestsHandler:
                 message_text=str(exc),
             )
         except ValueError as exc:
+            return self._error_response(
+                jsonrpc_message=message,
+                code=-32602,
+                message_text=str(exc),
+            )
+        except TypeError as exc:
             return self._error_response(
                 jsonrpc_message=message,
                 code=-32602,
@@ -130,7 +137,56 @@ class MCPRequestsHandler:
         }
 
     async def _tools_list(self) -> dict[str, Any]:
-        raise NotImplementedError
+        tools = await self._codex_app_bridge.list_tools()
+        return {"tools": tools}
 
     async def _tools_call(self, params: Any) -> dict[str, Any]:
-        raise NotImplementedError
+        if not isinstance(params, dict):
+            raise TypeError("tools/call params must be an object")
+
+        name = params.get("name")
+        if not isinstance(name, str) or not name:
+            raise ValueError("tools/call params.name must be a non-empty string")
+
+        arguments = params.get("arguments") if "arguments" in params else {}
+        if arguments is None:
+            arguments = {}
+        if not isinstance(arguments, dict):
+            raise TypeError("tools/call params.arguments must be an object")
+
+        result = await self._codex_app_bridge.call_tool(name, arguments)
+        return _codex_result_to_mcp(result)
+
+
+def _codex_result_to_mcp(result: dict[str, Any]) -> dict[str, Any]:
+    if "content" in result:
+        existing_content = result["content"]
+        return {
+            "content": existing_content
+            if isinstance(existing_content, list)
+            else [{"type": "text", "text": str(existing_content)}],
+            "isError": bool(result.get("isError")),
+        }
+
+    content_items = result.get("contentItems")
+    content: list[dict[str, Any]] = []
+    if isinstance(content_items, list):
+        content.extend(_content_item_to_mcp(item) for item in content_items)
+
+    if not content:
+        content = [{"type": "text", "text": json.dumps(result, ensure_ascii=False)}]
+
+    return {
+        "content": content,
+        "isError": result.get("success") is False,
+    }
+
+
+def _content_item_to_mcp(item: Any) -> dict[str, Any]:
+    if not isinstance(item, dict):
+        return {"type": "text", "text": str(item)}
+    if item.get("type") == "inputText":
+        return {"type": "text", "text": str(item.get("text", ""))}
+    if isinstance(item.get("text"), str):
+        return {"type": "text", "text": item["text"]}
+    return {"type": "text", "text": json.dumps(item, ensure_ascii=False)}
