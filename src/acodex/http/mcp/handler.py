@@ -13,62 +13,71 @@ MCP_PROTOCOL_VERSION = "2025-06-18"
 SUPPORTED_PROTOCOL_VERSIONS = {"2025-06-18", "2025-03-26", "2024-11-05"}
 
 
+class _MethodNotFoundError(ValueError):
+    def __init__(self, method: str) -> None:
+        self.method = method
+        super().__init__(f"Method not found: {method}")
+
+
 @dataclass(slots=True, kw_only=True)
 class MCPRequestsHandler:
     _codex_app_bridge: Injected[CodexAppBridge]
 
-    async def handle_mcp_jsonrpc_message(  # noqa: PLR0911
+    async def handle_mcp_jsonrpc_message(
         self,
         message: JSONRPCRequest | JSONRPCNotification,
     ) -> JSONRPCResponse | JSONRPCError | JSONRPCNotification | None:
-        try:  # noqa: PLW0717  # refactor later
-            if message.method == "initialize":
-                result = self._get_initialize_result(params=message.params)
-            elif message.method == "notifications/initialized":
-                return None
-            elif message.method == "ping":
-                result = {}
-            elif message.method == "tools/list":
-                result = await self._tools_list()
-            elif message.method == "tools/call":
-                result = await self._tools_call(params=message.params)
-            else:
-                if isinstance(message, JSONRPCNotification):
-                    return None
+        """Handle a single MCP JSON-RPC request or notification.
 
-                return JSONRPCError(
-                    jsonrpc="2.0",
-                    id=message.id,
-                    error=ErrorData(
-                        code=-32601,
-                        message=f"Method not found: {message.method}",
-                    ),
-                )
+        Returns:
+            A JSON-RPC response for requests, or None for notifications.
+
+        """
+        try:  # refactor later
+            result = await self._dispatch_message(message)
+        except _MethodNotFoundError as exc:
+            return self._error_response(
+                jsonrpc_message=message,
+                code=-32601,
+                message_text=str(exc),
+            )
         except ValueError as exc:
-            if isinstance(message, JSONRPCNotification):
-                return None
-
-            return JSONRPCError(
-                jsonrpc="2.0",
-                id=message.id,
-                error=ErrorData(
-                    code=-32602,
-                    message=str(exc),
-                ),
+            return self._error_response(
+                jsonrpc_message=message,
+                code=-32602,
+                message_text=str(exc),
             )
         except Exception as exc:  # noqa: BLE001 - surfaced as JSON-RPC internal error.
-            if isinstance(message, JSONRPCNotification):
-                return None
-
-            return JSONRPCError(
-                jsonrpc="2.0",
-                id=message.id,
-                error=ErrorData(
-                    code=-32603,
-                    message=str(exc),
-                ),
+            return self._error_response(
+                jsonrpc_message=message,
+                code=-32603,
+                message_text=str(exc),
             )
 
+        return self._success_response(message=message, result=result)
+
+    async def _dispatch_message(
+        self,
+        message: JSONRPCRequest | JSONRPCNotification,
+    ) -> dict[str, Any]:
+        if message.method == "initialize":
+            return self._get_initialize_result(params=message.params)
+        if message.method == "notifications/initialized":
+            return {}
+        if message.method == "ping":
+            return {}
+        if message.method == "tools/list":
+            return await self._tools_list()
+        if message.method == "tools/call":
+            return await self._tools_call(params=message.params)
+
+        raise _MethodNotFoundError(message.method)
+
+    @staticmethod
+    def _success_response(
+        message: JSONRPCRequest | JSONRPCNotification,
+        result: dict[str, Any],
+    ) -> JSONRPCResponse | None:
         if isinstance(message, JSONRPCNotification):
             return None
 
@@ -76,6 +85,25 @@ class MCPRequestsHandler:
             jsonrpc="2.0",
             id=message.id,
             result=result,
+        )
+
+    @staticmethod
+    def _error_response(
+        *,
+        jsonrpc_message: JSONRPCRequest | JSONRPCNotification,
+        code: int,
+        message_text: str,
+    ) -> JSONRPCError | None:
+        if isinstance(jsonrpc_message, JSONRPCNotification):
+            return None
+
+        return JSONRPCError(
+            jsonrpc="2.0",
+            id=jsonrpc_message.id,
+            error=ErrorData(
+                code=code,
+                message=message_text,
+            ),
         )
 
     @staticmethod
@@ -101,6 +129,8 @@ class MCPRequestsHandler:
             ),
         }
 
-    async def _tools_list(self) -> dict[str, Any]: ...
+    async def _tools_list(self) -> dict[str, Any]:
+        raise NotImplementedError
 
-    async def _tools_call(self, params: Any) -> dict[str, Any]: ...
+    async def _tools_call(self, params: Any) -> dict[str, Any]:
+        raise NotImplementedError

@@ -21,10 +21,14 @@ class CodexAppBridge:
     _cdp: Injected[CodexCDPClient]
     _settings: Injected[CodexAppBridgeSettings]
 
-    async def list_tools(self) -> list[dict[str, Any]]: ...
+    async def list_tools(self) -> list[dict[str, Any]]:
+        """List tools exposed by the Codex app."""
+        raise NotImplementedError
 
     async def call_tool(
         self,
         name: str,
         arguments: dict[str, Any] | None,
-    ) -> dict[str, Any]: ...
+    ) -> dict[str, Any]:
+        """Call a tool exposed by the Codex app."""
+        raise NotImplementedError

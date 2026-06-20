@@ -13,6 +13,12 @@ container = get_container()
 @dataclass(kw_only=True, slots=True)
 class FastAPIFactory:
     def __call__(self) -> FastAPI:
+        """Build the FastAPI application.
+
+        Returns:
+            The configured FastAPI application.
+
+        """
         app = FastAPI()
         app.include_router(mcp_router)
 

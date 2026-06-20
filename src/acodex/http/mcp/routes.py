@@ -37,7 +37,9 @@ async def handle_mcp(
             media_type="application/json",
         )
 
-    adapter = TypeAdapter(JSONRPCRequest | JSONRPCNotification)
+    adapter: TypeAdapter[JSONRPCRequest | JSONRPCNotification] = TypeAdapter(
+        JSONRPCRequest | JSONRPCNotification,
+    )
 
     if isinstance(request_data, list):
         responses: list[Any] = []

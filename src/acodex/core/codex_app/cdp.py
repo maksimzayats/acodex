@@ -15,6 +15,7 @@ class CodexCDPSettings(BaseSettings):
 
     @property
     def base_url(self) -> str:
+        """Return the base URL for the Codex app CDP endpoint."""
         return f"http://{self.host}:{self.port}"
 
 
