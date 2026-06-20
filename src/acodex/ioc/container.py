@@ -4,8 +4,9 @@ from functools import cache
 
 from diwire import Container
 
-from acodex.core.codex_app.bridge import CodexAppBridge, CodexAppBridgeSettings
-from acodex.core.codex_app.cdp import CodexCDPClient, CodexCDPSettings
+from acodex.config import load_config
+from acodex.core.codex_app.bridge import CodexAppBridge
+from acodex.core.codex_app.cdp import CodexCDPClient
 from acodex.http.mcp.handler import MCPRequestsHandler
 
 
@@ -19,8 +20,9 @@ def get_container() -> Container:
 
 
 def _register_dependencies(container: Container) -> None:
-    container.add_instance(CodexCDPSettings())
+    config = load_config()
+    container.add_instance(config.to_cdp_settings())
     container.add(CodexCDPClient)
-    container.add_instance(CodexAppBridgeSettings())
+    container.add_instance(config.to_bridge_settings())
     container.add(CodexAppBridge)
     container.add(MCPRequestsHandler)

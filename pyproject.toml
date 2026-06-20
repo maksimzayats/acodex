@@ -35,6 +35,9 @@ dependencies = [
     "websockets>=15.0",
 ]
 
+[project.scripts]
+acodex = "acodex.cli.__main__:main"
+
 [project.urls]
 Homepage = "https://github.com/maksimzayats/acodex"
 Repository = "https://github.com/maksimzayats/acodex"

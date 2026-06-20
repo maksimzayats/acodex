@@ -28,7 +28,25 @@ uv add acodex
 ```
 
 acodex expects a running Codex desktop app with a reachable Chrome DevTools
-Protocol endpoint. The default endpoint is `http://127.0.0.1:9222`.
+Protocol endpoint. The default endpoint is `http://127.0.0.1:5633`.
+
+The package also installs an `acodex` command for local setup and operations:
+
+```sh
+acodex config init
+acodex doctor
+acodex codex status
+acodex codex relaunch --yes
+acodex server start
+acodex server status
+acodex server logs --tail 50
+acodex server stop
+```
+
+Configuration is JSON at `~/.acodex/config.json` by default. Set
+`ACODEX_CONFIG` to use a different path. CLI flags override environment
+variables, which override the config file, which overrides defaults. The first
+HTTP server surface is the existing FastAPI app with `/healthz` and `/mcp`.
 
 List recent threads:
 

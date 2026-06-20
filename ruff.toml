@@ -60,6 +60,7 @@ ignore = [
     "PLR2004", # Magic value in comparison
     "PLR0913", # Too many arguments
     "PLR0206", # Property with parameters
+    "PLR6301", # Fake methods often keep instance shape for monkeypatching
     "SIM117", # Nested with statements
 
     # Private member access
