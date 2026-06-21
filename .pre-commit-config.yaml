@@ -1,11 +1,47 @@
 repos:
-  - repo: builtin
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
     hooks:
       - id: check-yaml
       - id: check-json
       - id: check-toml
       - id: end-of-file-fixer
       - id: check-added-large-files
+      - id: trailing-whitespace
+      - id: check-merge-conflict
+      - id: check-symlinks
+      - id: check-case-conflict
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.7
+    hooks:
+      - id: actionlint
+        additional_dependencies:
+          - "github.com/wasilibs/go-shellcheck/cmd/shellcheck@latest"
+
+  - repo: https://github.com/woodruffw/zizmor-pre-commit
+    rev: v1.16.0
+    hooks:
+      - id: zizmor
+        args: ["--no-progress"]
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck
+        args: ["--severity=style"]
+
+  - repo: https://github.com/crate-ci/typos
+    rev: v1.37.0
+    hooks:
+      - id: typos
+
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.1
+    hooks:
+      - id: codespell
 
   - repo: https://github.com/astral-sh/uv-pre-commit
     rev: 0.9.28
@@ -18,7 +54,17 @@ repos:
       - id: ruff-check
       - id: ruff-format
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.19.1
+  - repo: https://github.com/PyCQA/flake8
+    rev: 7.3.0
+    hooks:
+      - id: flake8
+        additional_dependencies:
+          - "wemake-python-styleguide>=1.6.2,<2"
+
+  - repo: local
     hooks:
       - id: mypy
+        name: mypy
+        entry: uv run mypy .
+        language: system
+        pass_filenames: false

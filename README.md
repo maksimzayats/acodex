@@ -1,161 +1,135 @@
 # acodex
 
-acodex is a fast, typed Python SDK for Codex CLI workflows (sync/async, streaming, structured output,
-images, safety controls), and API parity with the TypeScript SDK.
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-[![PyPI version](https://img.shields.io/pypi/v/acodex.svg)](https://pypi.org/project/acodex/)
-[![Python versions](https://img.shields.io/pypi/pyversions/acodex.svg)](https://pypi.org/project/acodex/)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![codecov](https://codecov.io/gh/maksimzayats/acodex/graph/badge.svg)](https://codecov.io/gh/maksimzayats/acodex)
-[![Docs](https://img.shields.io/badge/docs-acodex.dev-blue)](https://docs.acodex.dev)
+**Local MCP automation for the Codex desktop app.**
 
-## What is acodex?
+acodex gives scripts, tools, and agents a local bridge into a running Codex
+desktop session. It can relaunch Codex with a Chrome DevTools Protocol (CDP)
+port, run a managed HTTP/MCP server, and call the live `codex_app.*` tools that
+your Codex desktop build exposes.
 
-acodex spawns the `codex` CLI and exchanges JSONL events over stdin/stdout so you can run agent
-threads from Python with a fully typed surface: sync + async clients, streaming events, structured
-output, image inputs, resumable threads, and safety controls exposed as explicit options.
-
-## Install
-
-### Prerequisite: Codex CLI
-
-acodex wraps an external CLI. Install the Codex CLI and ensure `codex` is on your `PATH` (or pass
-`codex_path_override=...` to `Codex(...)` / `AsyncCodex(...)`).
-
-- Upstream CLI: https://github.com/openai/codex
-
-One installation option:
-
-```bash
-npm install -g @openai/codex
-codex --version
-```
-
-### Install acodex (uv-first)
-
-```bash
-uv add acodex
-uv run python your_script.py
-```
-
-`pip install acodex` also works, but `uv` is recommended.
-
-Recommended for structured output: structured-output extra (primary pattern via `output_type`):
-
-```bash
-uv add "acodex[structured-output]"
-# or:
-pip install "acodex[structured-output]"
-```
-
-## 60-second quickstart (sync)
-
-```python
-from pydantic import BaseModel
-
-from acodex import Codex
-
-class SummaryPayload(BaseModel):
-    summary: str
-
-thread = Codex().start_thread(
-    sandbox_mode="read-only",
-    approval_policy="on-request",
-    web_search_mode="disabled",
-)
-turn = thread.run(
-    "Summarize this repo.",
-    output_type=SummaryPayload,
-)
-print(turn.structured_response.summary)
-```
-
-Call `run()` repeatedly on the same `Thread` instance to continue the conversation. To resume later
-from disk, use `Codex().resume_thread(thread_id)`.
-
-## Async quickstart
-
-```python
-import asyncio
-
-from acodex import AsyncCodex
-
-
-async def main() -> None:
-    thread = AsyncCodex().start_thread()
-    turn = await thread.run("Say hello")
-    print(turn.final_response)
-
-
-asyncio.run(main())
-```
-
-## Advanced: stream parsed events
-
-Use `run_streamed()` to react to intermediate progress (tool calls, streaming responses, item
-updates, and final usage).
-
-```python
-from acodex import Codex, ItemCompletedEvent, TurnCompletedEvent, TurnFailedEvent
-
-codex = Codex()
-thread = codex.start_thread()
-
-streamed = thread.run_streamed(
-    "List the top 3 risks for this codebase. Be concise.",
-)
-for event in streamed.events:
-    if isinstance(event, ItemCompletedEvent):
-        print("item", event.item)
-    elif isinstance(event, TurnCompletedEvent):
-        print("usage", event.usage)
-    elif isinstance(event, TurnFailedEvent):
-        print("error", event.error.message)
-
-turn = streamed.result
-print(turn.final_response)
-```
-
-`streamed.result` is available only after `streamed.events` is fully consumed.
+[Quick Start](#quick-start) | [CLI](#cli) | [Support](#support) | [Contributing](CONTRIBUTING.md)
 
 ## Why acodex
 
-- **Typed surface**: strict type hints + mypy strict, no runtime deps by default.
-- **Sync + async**: `Codex`/`Thread` and `AsyncCodex`/`AsyncThread`.
-- **Streaming events**: `Thread.run_streamed()` yields parsed `ThreadEvent` dataclasses.
-- **Structured output**: validate into a Pydantic model via `output_type` (recommended), or pass
-  `output_schema` (JSON Schema) for schema-only parity with the TypeScript SDK.
-- **Images**: pass `UserInputLocalImage` alongside text in a single turn.
-- **Resume threads**: `resume_thread(thread_id)` (threads persisted under `~/.codex/sessions`).
-- **Safety controls**: expose Codex CLI controls as `ThreadOptions` (`sandbox_mode`,
-  `approval_policy`, `web_search_mode`, `working_directory`, ...).
-- **TS SDK parity**: vendored TypeScript SDK is the source of truth; compatibility tests fail loudly
-  on drift.
-- **Quality gates**: Ruff + mypy strict + 100% coverage.
+- **Live Codex desktop access.** Inspect and call the tools exposed by the
+  running desktop renderer without writing CDP plumbing.
+- **MCP-compatible local server.** Expose Codex desktop tools at `/mcp` for
+  local automation clients.
+- **Practical CLI workflow.** Check configuration, relaunch Codex with CDP,
+  manage the bridge server, and call tools from a terminal.
 
-## Compatibility & parity (TypeScript SDK)
+## Quick Start
 
-The vendored TypeScript SDK under `vendor/codex-ts-sdk/src/` is the source of truth. CI runs a
-Python-only compatibility suite that parses those TS sources and asserts the Python exports,
-options keys, events/items models, and class surface stay compatible.
+Prerequisites:
 
-An hourly workflow checks for new stable Codex releases and opens a PR to bump the vendored SDK:
-`.github/workflows/codex-ts-sdk-bump.yaml`.
+- Python 3.10 or newer.
+- `uv`; see the [official install guide](https://docs.astral.sh/uv/getting-started/installation/).
+- macOS with Codex.app installed. The relaunch flow expects
+  `/Applications/Codex.app` by default; set `ACODEX_CODEX_APP_PATH` if yours is
+  elsewhere.
 
-- Compatibility policy: `COMPATIBILITY.md`
-- Intentional divergences (documented + tested): `DIFFERENCES.md`
-- Contributing: `CONTRIBUTING.md`
+Install the CLI:
 
-## Links
+```sh
+uv tool install acodex
+```
 
-- Docs: https://docs.acodex.dev
-- GitHub: https://github.com/maksimzayats/acodex
-- Issues: https://github.com/maksimzayats/acodex/issues
+Initialize config, launch Codex with CDP, and start the local bridge:
 
-## Disclaimer
+```sh
+acodex config init
+acodex codex relaunch --yes
+acodex server start
+```
 
-It is independently maintained and is not affiliated with, sponsored by, or endorsed by OpenAI.
+`acodex codex relaunch --yes` starts or restarts Codex so acodex can reach the
+default CDP endpoint, `http://127.0.0.1:45217`.
+
+For deeper diagnostics after the server is running, use `acodex doctor --deep`.
+
+List and call Codex desktop tools:
+
+```sh
+acodex tools list
+acodex tools call codex_app.list_threads --limit 1
+```
+
+Stop the managed bridge when you are done:
+
+```sh
+acodex server stop
+```
+
+## CLI
+
+Common commands:
+
+```sh
+acodex config path
+acodex config show
+acodex doctor --deep
+acodex codex status
+acodex codex relaunch --yes
+acodex server start
+acodex server status
+acodex server logs --tail 50
+acodex tools list --json
+acodex tools call codex_app.list_threads --help
+```
+
+Tool calls use the MCP schema property names. Pass simple top-level arguments as
+flags, or use JSON for nested input:
+
+```sh
+acodex tools call codex_app.list_threads --limit=5
+acodex tools call --args-json '{"limit":5}' codex_app.list_threads
+acodex tools call --output json codex_app.list_threads --limit 5
+```
+
+## Configuration
+
+acodex reads JSON config from `~/.acodex/config.json` by default. Set
+`ACODEX_CONFIG` to use a different file. Use `acodex config path` and
+`acodex config show` to inspect the active path and effective values.
+
+Essential local endpoints:
+
+- Codex CDP: `http://127.0.0.1:45217`
+- Managed server health: `http://127.0.0.1:45218/healthz`
+- MCP endpoint: `http://127.0.0.1:45218/mcp`
+
+Configuration precedence and the full defaults matrix live in
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
+State-changing tool calls mutate the live Codex desktop app. Use
+`acodex tools call <tool> --help` before calling unfamiliar tools.
+
+## Support
+
+When setup fails, start with the built-in diagnostics and managed server logs:
+
+```sh
+acodex doctor
+acodex server logs --tail 50
+```
+
+If the issue continues, open a
+[GitHub issue](https://github.com/maksimzayats/acodex/issues) with what you
+tried, what happened, your OS and Python version, your acodex source branch or
+commit, your Codex desktop/CDP setup, and relevant command output with secrets
+removed.
+
+## Contributing
+
+Contributor setup, architecture notes, quality gates, and documentation rules
+live in [CONTRIBUTING.md](CONTRIBUTING.md). Agent-specific guidance lives in
+[AGENTS.md](AGENTS.md).
 
 ## License
 
-Apache-2.0. See `LICENSE`.
+acodex is released under the [MIT License](LICENSE).
+
+acodex is independently maintained and is not affiliated with, sponsored by, or
+endorsed by OpenAI.

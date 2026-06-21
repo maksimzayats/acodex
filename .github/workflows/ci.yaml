@@ -10,6 +10,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   ci:
     name: Lint & Tests (Python ${{ matrix.python-version }})
@@ -17,15 +20,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [ "3.10", "3.11", "3.12", "3.13", "3.13t", "3.14", "3.14t", "3.15", "3.15t" ]
+        python-version: [ "3.11", "3.12", "3.13", "3.13t", "3.14", "3.14t" ]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
         with:
           enable-cache: true
 
@@ -33,7 +37,7 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: uv sync --group dev --group docs
+        run: uv sync --group dev
 
       - name: Check formatting
         run: uv run ruff format --check .
@@ -44,41 +48,28 @@ jobs:
       - name: Type check with mypy
         run: uv run mypy .
 
-      - name: Run tests with coverage
-        if: ${{ !startsWith(matrix.python-version, '3.15') }}
-        run: uv run pytest -m "not real_integration" tests/ --cov=src/acodex --cov-report=xml --cov-report=term-missing
+      - name: Lint with WPS
+        run: uv run flake8 .
 
-      - name: Run tests (no coverage gate on Python 3.15)
-        if: ${{ startsWith(matrix.python-version, '3.15') }}
-        run: uv run pytest -m "not real_integration" tests/ --cov=src/acodex --cov-report=xml --cov-report=term-missing --cov-fail-under=0
+      - name: Check import contracts
+        run: uv run lint-imports
+
+      - name: Type check with pyright
+        run: uv run pyright
+
+      - name: Type check with pyrefly
+        run: uv run pyrefly check
+
+      - name: Check slotted classes
+        run: uv run slotscheck --require-subclass -m acodex
+
+      - name: Run tests with coverage
+        run: uv run pytest -m "not real_integration" tests/ --cov=src/acodex --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.14'
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@04b047e8bb82a0c002c8312c1c880fbc6a999d45 # v5
         with:
           files: ./coverage.xml
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
-
-  docs:
-    name: Docs Build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true
-
-      - name: Set up Python
-        run: uv python install 3.13
-
-      - name: Install dependencies
-        run: uv sync --group docs
-
-      - name: Build docs
-        run: uv run sphinx-build -W -b html docs docs/_build/html
