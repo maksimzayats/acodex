@@ -95,7 +95,8 @@ def test_relaunch_noops_when_port_matches() -> None:
     manager = CodexAppManager(system_ops=ops, cdp_probe=FakeCDPProbe(), poll_interval=0.0)
 
     assert (
-        manager.relaunch(config(), confirmed=False) == "Codex is already running with CDP port 45217"
+        manager.relaunch(config(), confirmed=False)
+        == "Codex is already running with CDP port 45217"
     )
     assert ops.launched == []
 
