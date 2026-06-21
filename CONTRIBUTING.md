@@ -128,6 +128,11 @@ The pre-commit stack includes standard file checks, Ruff, Flake8/WPS, mypy,
 Reference repositories under `references/` and temporary files under `tmp/` are
 excluded from package, lint, spelling, and type-check gates.
 
+Treat these gates as part of the architecture, not optional cleanup. Do not
+lower coverage, remove import-linter contracts, add production WPS ignores, or
+silence type checkers to land a feature. If a gate is noisy, change the code or
+the narrow test fixture that triggers it.
+
 Keep unit tests independent from a live Codex app. Tests that require a real
 local Codex setup must be marked with `real_integration`. Run them explicitly
 with:
@@ -143,10 +148,10 @@ Keep responsibilities narrow and explicit:
 - `src/acodex/cli/`: Typer command wiring, CLI orchestration, and terminal
   presentation.
 - `src/acodex/cli/server/` and `src/acodex/cli/tools/`: managed server and MCP
-  tool command services, with compatibility re-exports from package
-  `__init__` modules.
+  tool command services, with public re-exports from package `__init__`
+  modules.
 - `src/acodex/config/`: config loading, precedence, defaults, and validation,
-  with compatibility re-exports from `acodex.config`.
+  with public re-exports from `acodex.config`.
 - `src/acodex/core/codex_app/`: CDP connection, renderer asset discovery, and
   Codex desktop tool bridging.
 - `src/acodex/core/mcp_tools.py`: small JSON-RPC client used by the CLI to call
@@ -159,6 +164,12 @@ Prefer dependency injection for shared services, stateful collaborators, and
 I/O boundaries. Main feature logic should usually live in focused classes or
 dataclasses with injected dependencies. Use module-level functions for small
 pure helpers, validation, and format conversion where a class would add noise.
+
+Do not add private backward-compatibility shims. In particular, avoid `compat.py`
+modules, package-level monkeypatch facades, or private aliases such as
+`_deep_merge` that only forward to a real class. Package `__init__.py` files may
+re-export stable public APIs, but tests should import and exercise the real
+implementation class or module when behavior is not part of the public API.
 
 Plain service classes should use slots. Pydantic settings/models and exception
 classes are excluded from slotscheck. Keep FastAPI and Typer route functions
