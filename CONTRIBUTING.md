@@ -18,7 +18,7 @@ the README.
 
 Prerequisites:
 
-- Python 3.10 or newer.
+- Python 3.11 or newer.
 - `uv`; see the [official install guide](https://docs.astral.sh/uv/getting-started/installation/).
 - macOS with Codex.app installed for manual desktop testing. The relaunch flow
   expects `/Applications/Codex.app` by default; set `ACODEX_CODEX_APP_PATH` if
@@ -101,9 +101,32 @@ uv run ruff format .
 uv run ruff check --fix-only .
 uv run ruff check .
 uv run ruff format --check .
+uv run flake8 .
 uv run mypy .
+uv run lint-imports
+uv run pyright
+uv run pyrefly check
+uv run slotscheck --require-subclass -m acodex
 uv run pytest -m "not real_integration" tests/ --cov=src/acodex --cov-report=term-missing
 ```
+
+`ruff` remains the formatter and primary fast linter. Flake8 runs
+`wemake-python-styleguide` as a second, stricter source gate. Production code
+must satisfy WPS without per-file production ignores; tests have pytest-focused
+WPS exceptions for fixtures, assertions, monkeypatching, and private
+compatibility checks.
+
+Run the complete local hook stack when changing CI, scripts, markdown, YAML, or
+generated lock state:
+
+```sh
+uv run prek run --all-files
+```
+
+The pre-commit stack includes standard file checks, Ruff, Flake8/WPS, mypy,
+`uv-lock`, `actionlint`, `zizmor`, `shellcheck`, `typos`, and `codespell`.
+Reference repositories under `references/` and temporary files under `tmp/` are
+excluded from package, lint, spelling, and type-check gates.
 
 Keep unit tests independent from a live Codex app. Tests that require a real
 local Codex setup must be marked with `real_integration`. Run them explicitly
@@ -119,7 +142,11 @@ Keep responsibilities narrow and explicit:
 
 - `src/acodex/cli/`: Typer command wiring, CLI orchestration, and terminal
   presentation.
-- `src/acodex/config.py`: config loading, precedence, defaults, and validation.
+- `src/acodex/cli/server/` and `src/acodex/cli/tools/`: managed server and MCP
+  tool command services, with compatibility re-exports from package
+  `__init__` modules.
+- `src/acodex/config/`: config loading, precedence, defaults, and validation,
+  with compatibility re-exports from `acodex.config`.
 - `src/acodex/core/codex_app/`: CDP connection, renderer asset discovery, and
   Codex desktop tool bridging.
 - `src/acodex/core/mcp_tools.py`: small JSON-RPC client used by the CLI to call
@@ -133,9 +160,22 @@ I/O boundaries. Main feature logic should usually live in focused classes or
 dataclasses with injected dependencies. Use module-level functions for small
 pure helpers, validation, and format conversion where a class would add noise.
 
+Plain service classes should use slots. Pydantic settings/models and exception
+classes are excluded from slotscheck. Keep FastAPI and Typer route functions
+thin; delegate behavior to classes so tests can exercise service objects
+without launching Codex or a server process.
+
 Do not bypass layers for convenience. For example, CLI commands should not talk
 directly to the Codex renderer when the managed MCP or bridge layer owns that
 responsibility.
+
+Architecture contracts are enforced by import-linter:
+
+- `core` must not import CLI, HTTP, or dependency wiring.
+- `http` must not import CLI and may touch dependency wiring only from the app
+  entrypoint.
+- `cli` must not import HTTP transport.
+- Only process entrypoints may import dependency containers.
 
 ## Pull Request Checklist
 

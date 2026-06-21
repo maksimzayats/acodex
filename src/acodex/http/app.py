@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
@@ -8,13 +8,13 @@ from fastapi import FastAPI
 
 from acodex.core.codex_app.cdp import CodexCDPClient
 from acodex.http.mcp.routes import mcp_router
-from acodex.ioc.container import get_container
+from acodex.ioc.http import get_container
 
 container = get_container()
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
     try:
         yield
     finally:

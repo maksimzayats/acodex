@@ -3,10 +3,9 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
-from typing import Any, cast
+from typing import Any, Self, cast
 
 import pytest
-from typing_extensions import Self
 
 from acodex.core.mcp_tools import MCPToolClientError, MCPToolJSONRPCError, MCPToolsClient
 

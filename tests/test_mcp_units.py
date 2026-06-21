@@ -12,7 +12,12 @@ from starlette.requests import Request
 from acodex.core.codex_app.bridge import CodexAppBridge
 from acodex.core.codex_app.cdp import CodexCDPSettings
 from acodex.http.mcp import routes
-from acodex.http.mcp.handler import MCP_PROTOCOL_VERSION, MCPRequestsHandler, _codex_result_to_mcp
+from acodex.http.mcp.handler import (
+    MCP_PROTOCOL_VERSION,
+    MCPRequestsHandler,
+    _codex_result_to_mcp,
+    _content_item_to_mcp,
+)
 
 
 def run(coro: Any) -> Any:
@@ -21,6 +26,10 @@ def run(coro: Any) -> Any:
 
 def response_payload(response: Any) -> Any:
     return json.loads(response.body.decode("utf-8"))
+
+
+def unwrapped_route(route: Any) -> Any:
+    return route.__wrapped__
 
 
 class FakeBridge:
@@ -84,7 +93,7 @@ def test_routes_validate_and_dispatch_jsonrpc_messages() -> None:
     handler = FakeRoutesHandler()
 
     single = run(
-        routes.handle_mcp.__wrapped__(
+        unwrapped_route(routes.handle_mcp)(
             FakeRequest({"jsonrpc": "2.0", "id": "1", "method": "ping"}),
             handler=handler,
         ),
@@ -93,7 +102,7 @@ def test_routes_validate_and_dispatch_jsonrpc_messages() -> None:
     assert single.headers["mcp-protocol-version"] == MCP_PROTOCOL_VERSION
 
     batch = run(
-        routes.handle_mcp.__wrapped__(
+        unwrapped_route(routes.handle_mcp)(
             FakeRequest(
                 [
                     {"jsonrpc": "2.0", "id": 2, "method": "ping"},
@@ -112,7 +121,7 @@ def test_routes_validate_and_dispatch_jsonrpc_messages() -> None:
     ]
 
     notification_only = run(
-        routes.handle_mcp.__wrapped__(
+        unwrapped_route(routes.handle_mcp)(
             FakeRequest([{"jsonrpc": "2.0", "method": "notifications/initialized"}]),
             handler=handler,
         ),
@@ -124,7 +133,7 @@ def test_routes_reject_invalid_requests_and_origins() -> None:
     handler = FakeRoutesHandler()
 
     forbidden = run(
-        routes.handle_mcp.__wrapped__(
+        unwrapped_route(routes.handle_mcp)(
             FakeRequest(headers={"Origin": "https://example.com"}),
             handler=handler,
         ),
@@ -133,7 +142,7 @@ def test_routes_reject_invalid_requests_and_origins() -> None:
     assert response_payload(forbidden) == {"error": "forbidden origin"}
 
     parse_error = run(
-        routes.handle_mcp.__wrapped__(
+        unwrapped_route(routes.handle_mcp)(
             FakeRequest(json_error=JSONDecodeError("bad", "x", 0)),
             handler=handler,
         ),
@@ -179,7 +188,7 @@ def test_routes_reject_invalid_requests_and_origins() -> None:
 
 
 def test_healthz_returns_cdp_endpoint() -> None:
-    response = run(routes.healthz.__wrapped__(cdp_settings=CodexCDPSettings(port=9999)))
+    response = run(unwrapped_route(routes.healthz)(cdp_settings=CodexCDPSettings(port=9999)))
     assert response_payload(response) == {
         "ok": True,
         "mcp": "/mcp",
@@ -216,6 +225,14 @@ def test_handler_dispatches_and_converts_tool_results() -> None:
     )
     assert isinstance(fallback_initialize, JSONRPCResponse)
     assert fallback_initialize.result["protocolVersion"] == MCP_PROTOCOL_VERSION
+
+    none_initialize = run(
+        handler.handle_mcp_jsonrpc_message(
+            JSONRPCRequest(jsonrpc="2.0", id="init-3", method="initialize", params=None),
+        ),
+    )
+    assert isinstance(none_initialize, JSONRPCResponse)
+    assert none_initialize.result["protocolVersion"] == MCP_PROTOCOL_VERSION
 
     assert (
         run(
@@ -340,6 +357,7 @@ def test_handler_reports_jsonrpc_errors() -> None:
 
 
 def test_codex_result_to_mcp_content_shapes() -> None:
+    assert _content_item_to_mcp({"value": 1}) == {"type": "text", "text": '{"value": 1}'}
     assert _codex_result_to_mcp({"content": "hello", "isError": True}) == {
         "content": [{"type": "text", "text": "hello"}],
         "isError": True,

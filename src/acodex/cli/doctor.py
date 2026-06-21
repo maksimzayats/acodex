@@ -9,6 +9,10 @@ from acodex.cli.codex import CodexAppManager
 from acodex.cli.server import ServerManager
 from acodex.config import AcodexConfig, ConfigError, get_config_path, load_config
 
+CHECK_PASS = "pass"  # noqa: S105 - doctor check status, not a password.
+CHECK_WARN = "warn"
+CHECK_FAIL = "fail"
+
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class DoctorFix:
@@ -71,13 +75,13 @@ class Doctor:
         checks: list[DoctorCheck] = []
         try:
             config = load_config(config_path=self.config_path)
-            checks.append(DoctorCheck(name="config", status="pass", detail="config loaded"))
+            checks.append(DoctorCheck(name="config", status=CHECK_PASS, detail="config loaded"))
         except ConfigError as exc:
             config_path = self.config_path or get_config_path()
             checks.append(
                 DoctorCheck(
                     name="config",
-                    status="fail",
+                    status=CHECK_FAIL,
                     detail=str(exc),
                     fix=DoctorFix(
                         summary="Move the invalid config aside and recreate the default file.",
@@ -116,9 +120,9 @@ class Doctor:
         app_exists = bool(status["app_exists"])
         running = bool(status["running"])
         cdp_reachable = bool(status["cdp_reachable"])
-        app_status = "pass" if app_exists else "warn"
-        running_status = "pass" if running else "warn"
-        cdp_status = "pass" if cdp_reachable else "warn"
+        app_status = CHECK_PASS if app_exists else CHECK_WARN
+        running_status = CHECK_PASS if running else CHECK_WARN
+        cdp_status = CHECK_PASS if cdp_reachable else CHECK_WARN
         return [
             DoctorCheck(
                 name="codex-app",
@@ -148,19 +152,20 @@ class Doctor:
         checks = [
             DoctorCheck(
                 name="server",
-                status="pass" if running else "warn",
+                status=CHECK_PASS if running else CHECK_WARN,
                 detail=str(
-                    status.get("base_url", f"http://{config.server.host}:{config.server.port}"),
+                    status.get(
+                        "base_url",
+                        "http://{}:{}".format(config.server.host, config.server.port),
+                    ),
                 ),
                 fix=None if running else _server_start_fix(config),
             ),
             DoctorCheck(
                 name="server-healthz",
-                status="pass" if healthy else "warn",
+                status=CHECK_PASS if healthy else CHECK_WARN,
                 detail="/healthz",
-                fix=None
-                if healthy
-                else (_server_restart_fix(config) if running else _server_start_fix(config)),
+                fix=self._server_health_fix(config, healthy=healthy, running=running),
             ),
         ]
         if deep and healthy and isinstance(status.get("mcp_url"), str):
@@ -171,7 +176,7 @@ class Doctor:
             checks.append(
                 DoctorCheck(
                     name="server-mcp",
-                    status="pass" if mcp_ok else "fail",
+                    status=CHECK_PASS if mcp_ok else CHECK_FAIL,
                     detail=status["mcp_url"],
                     fix=None if mcp_ok else _server_restart_fix(config),
                 ),
@@ -183,10 +188,23 @@ class Doctor:
             self.server_manager = ServerManager(config_path=self.config_path)
         return self.server_manager
 
+    def _server_health_fix(
+        self,
+        config: AcodexConfig,
+        *,
+        healthy: bool,
+        running: bool,
+    ) -> DoctorFix | None:
+        if healthy:
+            return None
+        if running:
+            return _server_restart_fix(config)
+        return _server_start_fix(config)
+
 
 def _result(checks: list[DoctorCheck]) -> dict[str, Any]:
     return {
-        "ok": all(check.status != "fail" for check in checks),
+        "ok": all(check.status != CHECK_FAIL for check in checks),
         "checks": [check.to_json() for check in checks],
     }
 
@@ -197,14 +215,14 @@ def _check_writable_directory(name: str, path: Path) -> DoctorCheck:
     except OSError as exc:
         return DoctorCheck(
             name=name,
-            status="fail",
+            status=CHECK_FAIL,
             detail=str(exc),
             fix=DoctorFix(
                 summary="Create the directory and make sure your user can write to it.",
                 command=_join_shell(["mkdir", "-p", str(path)]),
             ),
         )
-    return DoctorCheck(name=name, status="pass", detail=str(path))
+    return DoctorCheck(name=name, status=CHECK_PASS, detail=str(path))
 
 
 def _configure_codex_app_fix() -> DoctorFix:
@@ -242,8 +260,17 @@ def _server_restart_fix(config: AcodexConfig) -> DoctorFix:
     return DoctorFix(
         summary="Restart the managed acodex HTTP server.",
         command=(
-            f"{_acodex_command('server', 'stop', '--force')} && "
-            f"{_acodex_command('server', 'start', '--host', config.server.host, '--port', str(config.server.port))}"
+            "{} && {}".format(
+                _acodex_command("server", "stop", "--force"),
+                _acodex_command(
+                    "server",
+                    "start",
+                    "--host",
+                    config.server.host,
+                    "--port",
+                    str(config.server.port),
+                ),
+            )
         ),
     )
 

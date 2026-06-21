@@ -7,24 +7,40 @@ from typing import Any, ClassVar, cast
 
 import pytest
 from rich.console import Console
+from rich.text import Text
 from typer.testing import CliRunner
 
 from acodex.cli import __main__ as cli, tools as cli_tools
 from acodex.cli.codex import CodexAppError
+from acodex.cli.commands import (
+    codex as codex_commands,
+    root as root_commands,
+    server as server_commands,
+    services as command_services,
+)
+from acodex.cli.presenters.base import CliPresenter
+from acodex.cli.presenters.codex import CodexPresenter
+from acodex.cli.presenters.doctor import DoctorPresenter
+from acodex.cli.presenters.server import ServerPresenter
 from acodex.cli.server import ServerError, ServerState
 from acodex.config import AcodexConfig
+from acodex.ioc import container as container_module
 
 runner = CliRunner()
 
 
-def capture_console(monkeypatch: pytest.MonkeyPatch) -> StringIO:
+def capture_console() -> tuple[StringIO, CliPresenter]:
     output = StringIO()
-    monkeypatch.setattr(
-        cli,
-        "console",
-        Console(file=output, force_terminal=False, color_system=None, width=100),
+    presenter = CliPresenter(
+        console=Console(file=output, force_terminal=False, color_system=None, width=100),
+        error_console=Console(
+            file=StringIO(),
+            force_terminal=False,
+            color_system=None,
+            width=100,
+        ),
     )
-    return output
+    return output, presenter
 
 
 class FakeDoctor:
@@ -162,7 +178,11 @@ def test_config_show_invalid_exits(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 
 
 def test_doctor_outputs(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(cli, "Doctor", FakeDoctor)
+    monkeypatch.setattr(
+        root_commands,
+        "DoctorCommandService",
+        lambda: command_services.DoctorCommandService(doctor=cast("Any", FakeDoctor())),
+    )
 
     human = runner.invoke(cli.app, ["doctor"])
     assert human.exit_code == 0
@@ -177,7 +197,11 @@ def test_doctor_outputs(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_doctor_outputs_suggested_fixes(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(cli, "Doctor", FakeDoctorWithFix)
+    monkeypatch.setattr(
+        root_commands,
+        "DoctorCommandService",
+        lambda: command_services.DoctorCommandService(doctor=cast("Any", FakeDoctorWithFix())),
+    )
 
     result = runner.invoke(cli.app, ["doctor"])
 
@@ -188,7 +212,7 @@ def test_doctor_outputs_suggested_fixes(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 def test_doctor_output_helpers_cover_edge_cases(monkeypatch: pytest.MonkeyPatch) -> None:
-    output = capture_console(monkeypatch)
+    output, presenter = capture_console()
     checks: list[dict[str, Any]] = [
         {"name": "passed", "status": "pass", "detail": "ok"},
         {"name": "unknown", "status": "mystery", "detail": "custom"},
@@ -233,7 +257,7 @@ def test_doctor_output_helpers_cover_edge_cases(monkeypatch: pytest.MonkeyPatch)
         },
     ]
 
-    cli._print_doctor_result({"ok": False, "checks": checks})
+    DoctorPresenter(base=presenter).result({"ok": False, "checks": checks})
 
     rendered = output.getvalue()
     assert "MYSTERY" in rendered
@@ -248,7 +272,11 @@ def test_codex_status_and_relaunch(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     fake = FakeCodexManager()
     path = tmp_path / "config.json"
     monkeypatch.setenv("ACODEX_CONFIG", str(path))
-    monkeypatch.setattr(cli, "CodexAppManager", lambda: fake)
+    monkeypatch.setattr(
+        codex_commands,
+        "CodexCommandService",
+        lambda: command_services.CodexCommandService(manager=cast("Any", fake)),
+    )
 
     status = runner.invoke(cli.app, ["codex", "status"])
     assert status.exit_code == 0
@@ -264,6 +292,13 @@ def test_codex_status_and_relaunch(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert relaunched.exit_code == 0
     assert "relaunched 6000" in relaunched.stdout
 
+    relaunched_with_app = runner.invoke(
+        cli.app,
+        ["codex", "relaunch", "--yes", "--app", str(tmp_path / "Codex.app"), "--port", "6001"],
+    )
+    assert relaunched_with_app.exit_code == 0
+    assert "relaunched 6001" in relaunched_with_app.stdout
+
 
 def test_codex_status_config_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = tmp_path / "config.json"
@@ -277,14 +312,14 @@ def test_codex_status_config_error(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 
 
 def test_codex_status_warning_variants(monkeypatch: pytest.MonkeyPatch) -> None:
-    output = capture_console(monkeypatch)
+    output, presenter = capture_console()
     base: dict[str, Any] = {
         "app_path": "/Applications/Codex.app",
         "detected_cdp_port": None,
         "configured_cdp_url": "http://127.0.0.1:9222",
     }
 
-    cli._print_codex_status(
+    CodexPresenter(base=presenter).status(
         base
         | {
             "app_exists": False,
@@ -293,7 +328,7 @@ def test_codex_status_warning_variants(monkeypatch: pytest.MonkeyPatch) -> None:
             "cdp_reachable": False,
         },
     )
-    cli._print_codex_status(
+    CodexPresenter(base=presenter).status(
         base
         | {
             "app_exists": True,
@@ -302,7 +337,7 @@ def test_codex_status_warning_variants(monkeypatch: pytest.MonkeyPatch) -> None:
             "cdp_reachable": False,
         },
     )
-    cli._print_codex_status(
+    CodexPresenter(base=presenter).status(
         base
         | {
             "app_exists": True,
@@ -311,7 +346,7 @@ def test_codex_status_warning_variants(monkeypatch: pytest.MonkeyPatch) -> None:
             "cdp_reachable": False,
         },
     )
-    cli._print_codex_status(
+    CodexPresenter(base=presenter).status(
         base
         | {
             "app_exists": True,
@@ -332,7 +367,11 @@ def test_codex_status_warning_variants(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_server_commands(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     fake = FakeServerManager()
     monkeypatch.setenv("ACODEX_CONFIG", str(tmp_path / "config.json"))
-    monkeypatch.setattr(cli, "ServerManager", lambda: fake)
+    monkeypatch.setattr(
+        server_commands,
+        "ServerCommandService",
+        lambda: command_services.ServerCommandService(manager=cast("Any", fake)),
+    )
 
     start = runner.invoke(cli.app, ["server", "start", "--host", "127.0.0.2", "--port", "9000"])
     assert start.exit_code == 0
@@ -388,8 +427,12 @@ def test_tools_list_and_call_commands(monkeypatch: pytest.MonkeyPatch) -> None:
         "content": [{"type": "text", "text": "called"}],
         "isError": False,
     }
-    monkeypatch.setattr(cli_tools, "ServerManager", ToolsServerManager)
-    monkeypatch.setattr(cli_tools, "MCPToolsClient", FakeToolsClient)
+    monkeypatch.setattr(container_module, "build_server_manager", ToolsServerManager)
+    monkeypatch.setattr(
+        container_module,
+        "build_tools_client_factory",
+        lambda: cli_tools.MCPToolsClientFactory(client_class=cast("Any", FakeToolsClient)),
+    )
 
     listed = runner.invoke(cli.app, ["tools", "list"])
     assert listed.exit_code == 0
@@ -439,7 +482,7 @@ def test_tools_list_and_call_commands(monkeypatch: pytest.MonkeyPatch) -> None:
         ["tools", "call", "--args-json", '{"payload":{"nested":true}}', "codex_app.echo"],
     )
     assert called_with_args_json.exit_code == 0
-    args_json_call = cast("tuple[str, dict[str, Any]]", FakeToolsClient.calls[-1])
+    args_json_call = cast("Any", FakeToolsClient.calls[-1])
     assert args_json_call[0] == "codex_app.echo"
     assert args_json_call[1]["payload"] == {"nested": True}
 
@@ -448,7 +491,7 @@ def test_tools_list_and_call_commands(monkeypatch: pytest.MonkeyPatch) -> None:
         ["tools", "call", "codex_app.echo", "--output", "json"],
     )
     assert call_with_tool_output_arg.exit_code == 0
-    output_arg_call = cast("tuple[str, dict[str, Any]]", FakeToolsClient.calls[-1])
+    output_arg_call = cast("Any", FakeToolsClient.calls[-1])
     assert output_arg_call == ("codex_app.echo", {"output": "json"})
 
 
@@ -472,8 +515,12 @@ def test_tools_call_tool_help(monkeypatch: pytest.MonkeyPatch) -> None:
             },
         },
     ]
-    monkeypatch.setattr(cli_tools, "ServerManager", ToolsServerManager)
-    monkeypatch.setattr(cli_tools, "MCPToolsClient", FakeToolsClient)
+    monkeypatch.setattr(container_module, "build_server_manager", ToolsServerManager)
+    monkeypatch.setattr(
+        container_module,
+        "build_tools_client_factory",
+        lambda: cli_tools.MCPToolsClientFactory(client_class=cast("Any", FakeToolsClient)),
+    )
 
     help_result = runner.invoke(cli.app, ["tools", "call", "codex_app.list_threads", "--help"])
     assert help_result.exit_code == 0
@@ -520,8 +567,12 @@ def test_tools_call_tool_help_handles_output_schema_and_missing_output(
             "inputSchema": {"type": "object"},
         },
     ]
-    monkeypatch.setattr(cli_tools, "ServerManager", ToolsServerManager)
-    monkeypatch.setattr(cli_tools, "MCPToolsClient", FakeToolsClient)
+    monkeypatch.setattr(container_module, "build_server_manager", ToolsServerManager)
+    monkeypatch.setattr(
+        container_module,
+        "build_tools_client_factory",
+        lambda: cli_tools.MCPToolsClientFactory(client_class=cast("Any", FakeToolsClient)),
+    )
 
     schema_help = runner.invoke(cli.app, ["tools", "call", "codex_app.echo", "--help"])
     assert schema_help.exit_code == 0
@@ -551,8 +602,12 @@ def test_tools_command_errors(monkeypatch: pytest.MonkeyPatch) -> None:
                 "mcp_url": "http://127.0.0.1:45218/mcp",
             }
 
-    monkeypatch.setattr(cli_tools, "ServerManager", ToolsServerManager)
-    monkeypatch.setattr(cli_tools, "MCPToolsClient", ErrorToolsClient)
+    monkeypatch.setattr(container_module, "build_server_manager", ToolsServerManager)
+    monkeypatch.setattr(
+        container_module,
+        "build_tools_client_factory",
+        lambda: cli_tools.MCPToolsClientFactory(client_class=cast("Any", ErrorToolsClient)),
+    )
 
     failed_tool = runner.invoke(cli.app, ["tools", "call", "codex_app.fail"])
     assert failed_tool.exit_code == 1
@@ -582,8 +637,12 @@ def test_tools_list_empty_and_server_status_errors(monkeypatch: pytest.MonkeyPat
                 "mcp_url": "http://127.0.0.1:45218/mcp",
             }
 
-    monkeypatch.setattr(cli_tools, "ServerManager", EmptyToolsServerManager)
-    monkeypatch.setattr(cli_tools, "MCPToolsClient", EmptyToolsClient)
+    monkeypatch.setattr(container_module, "build_server_manager", EmptyToolsServerManager)
+    monkeypatch.setattr(
+        container_module,
+        "build_tools_client_factory",
+        lambda: cli_tools.MCPToolsClientFactory(client_class=cast("Any", EmptyToolsClient)),
+    )
     empty = runner.invoke(cli.app, ["tools", "list"])
     assert empty.exit_code == 0
     assert "No tools are currently exposed" in empty.stdout
@@ -593,7 +652,11 @@ def test_tools_list_empty_and_server_status_errors(monkeypatch: pytest.MonkeyPat
         ({"running": True, "healthy": False}, "Managed server is not healthy"),
         ({"running": True, "healthy": True}, "did not include an MCP URL"),
     ]:
-        monkeypatch.setattr(cli_tools, "ServerManager", server_manager_for_status(server_status))
+        monkeypatch.setattr(
+            container_module,
+            "build_server_manager",
+            server_manager_for_status(server_status),
+        )
         failed = runner.invoke(cli.app, ["tools", "list"])
         assert failed.exit_code == 1
         assert message in failed.stderr
@@ -623,12 +686,36 @@ def test_tool_call_output_helpers() -> None:
     assert '"isError": false' in rendered
     assert "details" in rendered
     assert cli_tools.tool_output_shape({"name": None}) is None
+    assert cli_tools.find_tool_descriptor([], "missing") is None
+    assert cli_tools.mcp_tool_result_shape()["content"][0]["text"] == "..."
+
+
+def test_cli_presenter_and_factories_cover_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_container = object()
+
+    class FakeHttpContainerModule:
+        def get_container(self) -> object:
+            return fake_container
+
+    _, presenter = capture_console()
+
+    assert "Not available" in cast("Text", presenter.render_value(None)).plain
+    assert not cli_tools.tool_result_text({"content": []})
+    assert cli_tools.tool_result_text({"content": ["raw"]}) == '"raw"'
+    assert isinstance(container_module.build_server_manager(), cli_tools.ServerManager)
+    assert isinstance(
+        container_module.build_tools_client_factory(),
+        cli_tools.MCPToolsClientFactory,
+    )
+    monkeypatch.setattr(container_module, "import_module", lambda _name: FakeHttpContainerModule())
+    assert container_module.get_container() is fake_container
 
 
 def test_server_status_optional_fields(monkeypatch: pytest.MonkeyPatch) -> None:
-    output = capture_console(monkeypatch)
+    output, presenter = capture_console()
 
-    cli._print_server_status(
+    server_presenter = ServerPresenter(base=presenter)
+    server_presenter.status(
         {
             "running": True,
             "healthy": True,
@@ -639,8 +726,8 @@ def test_server_status_optional_fields(monkeypatch: pytest.MonkeyPatch) -> None:
             "log_path": "logs/server.log",
         },
     )
-    cli._print_server_status({"running": False, "state_path": "run/server.json"})
-    cli._print_success("Done", "detail line")
+    server_presenter.status({"running": False, "state_path": "run/server.json"})
+    presenter.success("Done", "detail line")
 
     rendered = output.getvalue()
     assert "Healthy" in rendered
@@ -659,7 +746,11 @@ def test_server_stop_error_and_not_running_status(monkeypatch: pytest.MonkeyPatc
             return {"running": False}
 
     fake = StopErrorServer()
-    monkeypatch.setattr(cli, "ServerManager", lambda: fake)
+    monkeypatch.setattr(
+        server_commands,
+        "ServerCommandService",
+        lambda: command_services.ServerCommandService(manager=cast("Any", fake)),
+    )
 
     failed = runner.invoke(cli.app, ["server", "stop"])
     assert failed.exit_code == 1

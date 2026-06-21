@@ -2,13 +2,19 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, BinaryIO, cast
+from typing import Any, BinaryIO, Self, cast
 
 import pytest
-from typing_extensions import Self
 
 from acodex.cli import server as server_module
-from acodex.cli.server import HttpProbe, ProcessOps, ServerError, ServerManager, ServerState
+from acodex.cli.server import (
+    HttpProbe,
+    ProcessOps,
+    ServerError,
+    ServerManager,
+    ServerState,
+    SocketPortChecker,
+)
 from acodex.config import AcodexConfig, ServerConfig
 
 
@@ -59,11 +65,26 @@ class FakeHttpProbe(HttpProbe):
         return self.mcp_ok
 
 
-def manager(tmp_path: Path, *, process_ops: ProcessOps, probe: HttpProbe) -> ServerManager:
+class FakePortChecker(SocketPortChecker):
+    def __init__(self, *, in_use: bool = False) -> None:
+        self.in_use = in_use
+
+    def is_in_use(self, host: str, port: int) -> bool:
+        return self.in_use
+
+
+def manager(
+    tmp_path: Path,
+    *,
+    process_ops: ProcessOps,
+    probe: HttpProbe,
+    port_checker: SocketPortChecker | None = None,
+) -> ServerManager:
     return ServerManager(
         config_path=tmp_path / "config.json",
         process_ops=process_ops,
         http_probe=probe,
+        port_checker=port_checker or FakePortChecker(),
         poll_interval=0.0,
     )
 
@@ -102,7 +123,7 @@ def test_server_start_handles_stale_and_running_state(tmp_path: Path) -> None:
     probe = FakeHttpProbe()
     server = manager(tmp_path, process_ops=process_ops, probe=probe)
     server.paths.state_path.parent.mkdir(parents=True)
-    server._write_state(state(pid=999))
+    server.state_store.write(server.paths.state_path, state(pid=999))
 
     assert server.start(AcodexConfig()).pid == 123
 
@@ -112,10 +133,13 @@ def test_server_start_handles_stale_and_running_state(tmp_path: Path) -> None:
 
 def test_server_start_port_conflict_and_health_failure(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    server = manager(tmp_path, process_ops=FakeProcessOps(), probe=FakeHttpProbe())
-    monkeypatch.setattr(ServerManager, "_port_in_use", staticmethod(lambda _host, _port: True))
+    server = manager(
+        tmp_path,
+        process_ops=FakeProcessOps(),
+        probe=FakeHttpProbe(),
+        port_checker=FakePortChecker(in_use=True),
+    )
     with pytest.raises(ServerError, match="already in use"):
         server.start(AcodexConfig())
 
@@ -125,7 +149,6 @@ def test_server_start_port_conflict_and_health_failure(
         process_ops=failing_process_ops,
         probe=FakeHttpProbe(reachable=False),
     )
-    monkeypatch.setattr(ServerManager, "_port_in_use", staticmethod(lambda _host, _port: False))
     with pytest.raises(ServerError, match="did not become healthy"):
         failing.start(AcodexConfig())
     assert failing_process_ops.terminated == [123]
@@ -139,11 +162,11 @@ def test_server_stop_paths(tmp_path: Path) -> None:
     assert not server.stop(force=False)
 
     server.paths.state_path.parent.mkdir(parents=True)
-    server._write_state(state(pid=555))
+    server.state_store.write(server.paths.state_path, state(pid=555))
     assert not server.stop(force=False)
     assert not server.paths.state_path.exists()
 
-    server._write_state(state(pid=123))
+    server.state_store.write(server.paths.state_path, state(pid=123))
     process_ops.running.add(123)
     assert server.stop(force=False)
     assert process_ops.terminated == [123]
@@ -155,7 +178,7 @@ def test_server_stop_force(tmp_path: Path) -> None:
     process_ops.running.add(123)
     server = manager(tmp_path, process_ops=process_ops, probe=FakeHttpProbe())
     server.paths.state_path.parent.mkdir(parents=True)
-    server._write_state(state())
+    server.state_store.write(server.paths.state_path, state())
 
     with pytest.raises(ServerError, match="--force"):
         server.stop(force=False)
@@ -175,7 +198,7 @@ def test_status_and_logs(tmp_path: Path) -> None:
     server.paths.state_path.parent.mkdir(parents=True)
     server.paths.log_path.parent.mkdir(parents=True)
     server.paths.log_path.write_text("one\ntwo\nthree\n", encoding="utf-8")
-    server._write_state(state())
+    server.state_store.write(server.paths.state_path, state())
     process_ops.running.add(123)
 
     status = server.status()
@@ -199,6 +222,9 @@ def test_state_json_invalid_and_custom_config(tmp_path: Path) -> None:
     assert server.read_state() is None
 
     server.paths.state_path.write_text("{bad", encoding="utf-8")
+    assert server.read_state() is None
+
+    server.paths.state_path.write_text('{"pid": 1}', encoding="utf-8")
     assert server.read_state() is None
 
     custom = AcodexConfig(server=ServerConfig(host="127.0.0.2", port=8899))
@@ -265,6 +291,23 @@ def test_process_ops_and_http_probe_success(monkeypatch: pytest.MonkeyPatch) -> 
     probe = HttpProbe()
     assert probe.reachable("http://127.0.0.1:45218/healthz", timeout=0.1)
     assert probe.mcp_initialize("http://127.0.0.1:45218/mcp", timeout=0.1)
+
+    class FakeSocket:
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def settimeout(self, timeout: float) -> None:
+            assert timeout == pytest.approx(0.2)
+
+        def connect_ex(self, address: tuple[str, int]) -> int:
+            assert address == ("127.0.0.1", 45218)
+            return 0
+
+    monkeypatch.setattr("acodex.cli.server.probe.socket.socket", lambda *_args: FakeSocket())
+    assert SocketPortChecker().is_in_use("127.0.0.1", 45218)
 
 
 def test_state_from_json_defaults_command() -> None:

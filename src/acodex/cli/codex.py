@@ -3,11 +3,10 @@ from __future__ import annotations
 import re
 import subprocess  # noqa: S404
 import time
-import urllib.error
-import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib import error as url_error, request as url_request
 
 from acodex.config import AcodexConfig
 
@@ -27,7 +26,9 @@ class ProcessInfo:
 
 
 class CodexSystemOps:
-    def list_processes(self) -> list[ProcessInfo]:  # noqa: PLR6301
+    __slots__ = ()
+
+    def list_processes(self) -> list[ProcessInfo]:
         """Return local process ids and command lines.
 
         Returns:
@@ -50,7 +51,7 @@ class CodexSystemOps:
                 processes.append(ProcessInfo(pid=int(pid_text), command=command))
         return processes
 
-    def app_exists(self, app_path: str) -> bool:  # noqa: PLR6301
+    def app_exists(self, app_path: str) -> bool:
         """Return whether the configured Codex app bundle exists.
 
         Returns:
@@ -59,7 +60,7 @@ class CodexSystemOps:
         """
         return Path(app_path).exists()
 
-    def quit_app(self) -> None:  # noqa: PLR6301
+    def quit_app(self) -> None:
         """Ask macOS to quit the Codex app."""
         subprocess.run(
             ["/usr/bin/osascript", "-e", 'tell application "Codex" to quit'],
@@ -68,7 +69,7 @@ class CodexSystemOps:
             text=True,
         )
 
-    def launch_app(self, app_path: str, *, port: int) -> None:  # noqa: PLR6301
+    def launch_app(self, app_path: str, *, port: int) -> None:
         """Launch Codex with a remote debugging port."""
         subprocess.run(  # noqa: S603 - fixed open executable; app path is explicit user config.
             [
@@ -84,7 +85,9 @@ class CodexSystemOps:
 
 
 class CDPProbe:
-    def reachable(self, base_url: str, *, timeout: float) -> bool:  # noqa: PLR6301
+    __slots__ = ()
+
+    def reachable(self, base_url: str, *, timeout: float) -> bool:
         """Return whether the CDP target list is reachable.
 
         Returns:
@@ -92,9 +95,9 @@ class CDPProbe:
 
         """
         try:
-            with urllib.request.urlopen(f"{base_url}/json/list", timeout=timeout) as response:  # noqa: S310
+            with url_request.urlopen("{}/json/list".format(base_url), timeout=timeout) as response:  # noqa: S310
                 return HTTP_OK <= response.status < HTTP_REDIRECT
-        except (OSError, urllib.error.URLError):
+        except (OSError, url_error.URLError):
             return False
 
 
@@ -112,12 +115,16 @@ class CodexAppManager:
 
         """
         process = self.find_codex_process(config.codex.app_path)
-        detected_port = detect_cdp_port(process.command) if process is not None else None
+        detected_port = None
+        process_pid = None
+        if process is not None:
+            detected_port = detect_cdp_port(process.command)
+            process_pid = process.pid
         return {
             "app_path": config.codex.app_path,
             "app_exists": self.system_ops.app_exists(config.codex.app_path),
             "running": process is not None,
-            "pid": process.pid if process is not None else None,
+            "pid": process_pid,
             "detected_cdp_port": detected_port,
             "configured_cdp_url": config.codex.cdp_url,
             "cdp_reachable": self.cdp_probe.reachable(
@@ -138,7 +145,7 @@ class CodexAppManager:
         """
         process = self.find_codex_process(config.codex.app_path)
         if process is not None and detect_cdp_port(process.command) == config.codex.cdp_port:
-            return f"Codex is already running with CDP port {config.codex.cdp_port}"
+            return "Codex is already running with CDP port {}".format(config.codex.cdp_port)
         if process is not None and not confirmed:
             raise CodexAppError("Codex is running without the configured CDP port")
         if process is not None:
@@ -146,8 +153,10 @@ class CodexAppManager:
             self._wait_until_stopped(config.codex.app_path, timeout=config.codex.launch_timeout)
         self.system_ops.launch_app(config.codex.app_path, port=config.codex.cdp_port)
         if not self.wait_for_cdp(config):
-            raise CodexAppError(f"Codex CDP did not become reachable at {config.codex.cdp_url}")
-        return f"Codex launched with CDP port {config.codex.cdp_port}"
+            raise CodexAppError(
+                "Codex CDP did not become reachable at {}".format(config.codex.cdp_url)
+            )
+        return "Codex launched with CDP port {}".format(config.codex.cdp_port)
 
     def wait_for_cdp(self, config: AcodexConfig) -> bool:
         """Wait until the configured CDP endpoint responds.

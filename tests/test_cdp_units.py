@@ -3,10 +3,9 @@ from __future__ import annotations
 import asyncio
 import json
 import urllib.error
-from typing import Any, cast
+from typing import Any, Self, cast
 
 import pytest
-from typing_extensions import Self
 
 from acodex.core.codex_app import cdp as cdp_module
 from acodex.core.codex_app.cdp import CodexCDPClient, CodexCDPError, CodexCDPSettings

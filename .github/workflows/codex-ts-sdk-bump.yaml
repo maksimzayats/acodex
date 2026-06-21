@@ -15,12 +15,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
         with:
           enable-cache: true
 
@@ -46,8 +47,10 @@ jobs:
 
       - name: Stop if already up-to-date
         if: steps.current.outputs.tag == steps.latest.outputs.tag
+        env:
+          TAG: ${{ steps.current.outputs.tag }}
         run: |
-          echo "Already pinned to ${{ steps.current.outputs.tag }}; no stable release bump needed."
+          echo "Already pinned to ${TAG}; no stable release bump needed."
 
       - name: Vendor latest release
         if: steps.current.outputs.tag != steps.latest.outputs.tag
@@ -64,7 +67,7 @@ jobs:
 
       - name: Open PR
         if: steps.current.outputs.tag != steps.latest.outputs.tag
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
         with:
           branch: codex/bump-ts-sdk
           delete-branch: true

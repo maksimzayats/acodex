@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from diwire import Injected
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -44,7 +44,8 @@ class CodexAppBridge:
         tools = result.get("tools", [])
         if not isinstance(tools, list):
             return []
-        return [tool for tool in tools if isinstance(tool, dict)]
+        tool_payloads = cast("list[Any]", tools)  # type: ignore[redundant-cast]
+        return [cast("dict[str, Any]", tool) for tool in tool_payloads if isinstance(tool, dict)]
 
     async def call_tool(
         self,
@@ -71,9 +72,12 @@ class CodexAppBridge:
                 "success": False,
                 "contentItems": [{"type": "inputText", "text": str(tool_result)}],
             }
-        if raw_name == "load_workspace_dependencies" and is_descriptor_without_handler(tool_result):
+        tool_payload = cast("dict[str, Any]", tool_result)
+        if raw_name == "load_workspace_dependencies" and is_descriptor_without_handler(
+            tool_payload
+        ):
             return load_workspace_dependencies_fallback()
-        return tool_result
+        return tool_payload
 
     async def _evaluate(self, payload: dict[str, Any]) -> dict[str, Any]:
         assets = await self._get_assets()
@@ -88,9 +92,10 @@ class CodexAppBridge:
             result = json.loads(result)
         if not isinstance(result, dict):
             raise CodexAppBridgeError(f"Unexpected Codex bridge result: {result!r}")
-        if not result.get("ok"):
-            raise CodexAppBridgeError(str(result.get("error") or "Codex bridge failed"))
-        return result
+        result_payload = cast("dict[str, Any]", result)
+        if not result_payload.get("ok"):
+            raise CodexAppBridgeError(str(result_payload.get("error") or "Codex bridge failed"))
+        return result_payload
 
     async def _get_assets(self) -> CodexRendererAssets:
         if self._assets is None:

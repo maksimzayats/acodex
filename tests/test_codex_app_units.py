@@ -163,6 +163,7 @@ def test_renderer_asset_discovery_errors_and_helpers() -> None:
                 {"url": "app://-/a.js"},
                 {"url": "app://-/b", "type": "Script"},
                 {"url": "app://-/c", "mimeType": "text/javascript"},
+                {"url": "app://-/style.css", "type": "Stylesheet"},
                 {"url": 1, "type": "Script"},
                 "bad",
             ],
@@ -184,6 +185,21 @@ def test_renderer_asset_discovery_errors_and_helpers() -> None:
         ("root", "app://-/c"),
         ("child", "app://-/child.js"),
     ]
+    assert (
+        assets.ResourceTreeScanner().collect({
+            "frame": "bad",
+            "resources": "bad",
+            "childFrames": "bad",
+        })
+        == []
+    )
+    assert (
+        assets.ResourceTreeScanner().collect({
+            "frame": {"id": "root"},
+            "resources": "bad",
+        })
+        == []
+    )
 
 
 def test_bridge_lists_and_calls_tools(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -283,6 +299,9 @@ def test_runtime_dependency_helpers(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert not runtime_dependencies.is_descriptor_without_handler({"success": True})
     assert not runtime_dependencies.is_descriptor_without_handler(
         {"success": False, "contentItems": "not a list"},
+    )
+    assert not runtime_dependencies.is_descriptor_without_handler(
+        {"success": False, "contentItems": [{"text": "other"}, {"text": 1}]},
     )
     assert runtime_dependencies.is_descriptor_without_handler(
         {

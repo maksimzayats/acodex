@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 
 def is_descriptor_without_handler(result: dict[str, Any]) -> bool:
@@ -11,12 +11,17 @@ def is_descriptor_without_handler(result: dict[str, Any]) -> bool:
     items = result.get("contentItems")
     if not isinstance(items, list):
         return False
-    return any(
-        isinstance(item, dict)
-        and isinstance(item.get("text"), str)
-        and "did not export a callable renderer handler" in item["text"]
-        for item in items
-    )
+    content_items = cast("list[Any]", items)  # type: ignore[redundant-cast]
+    for item in content_items:
+        if not isinstance(item, dict):
+            continue
+        content_item = cast("dict[str, Any]", item)
+        if (
+            isinstance(content_item.get("text"), str)
+            and "did not export a callable renderer handler" in content_item["text"]
+        ):
+            return True
+    return False
 
 
 def load_workspace_dependencies_fallback() -> dict[str, Any]:
@@ -33,12 +38,13 @@ def load_workspace_dependencies_fallback() -> dict[str, Any]:
             ],
         }
 
-    runtime_json = runtime_root / "runtime.json"
-    runtime = json.loads(runtime_json.read_text())
+    runtime_payload = json.loads((runtime_root / "runtime.json").read_text())
+    runtime = cast("dict[str, Any]", runtime_payload) if isinstance(runtime_payload, dict) else {}
     dependencies = runtime_root / "dependencies"
     node = dependencies / "node"
     python = dependencies / "python"
     node_executable = node / "bin" / "node"
+    node_packages = node / "node_modules"
     python_executable = python / "bin" / "python3"
     native_binaries = dependencies / "bin"
 
@@ -50,7 +56,7 @@ def load_workspace_dependencies_fallback() -> dict[str, Any]:
             "Use these bundled paths for sheets, slides, documents, PDFs, images, or browser automation:",
             f"- Bundle version: `{runtime.get('bundleVersion', 'unknown')}`",
             f"- Node.js executable: `{node_executable}`",
-            f"- Node.js packages: `{node / 'node_modules'}`",
+            f"- Node.js packages: `{node_packages}`",
             f"- Python executable: `{python_executable}`",
             f"- Python packages: `{python}`",
             f"- Native binaries: `{native_binaries}`",

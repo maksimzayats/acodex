@@ -3,7 +3,7 @@ name = "acodex"
 dynamic = ["version"]
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [{ name = "Maksim Zayats", email = "maksim@zayats.dev" }]
 keywords = ["codex", "openai", "sdk", "cli", "agents", "automation", "streaming", "jsonl"]
 classifiers = [
@@ -14,7 +14,6 @@ classifiers = [
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -48,12 +47,18 @@ Changelog = "https://github.com/maksimzayats/acodex/releases"
 
 [dependency-groups]
 dev = [
+    "codespell>=2.4,<3",
+    "import-linter>=2.10,<3",
     "mcp>=1.27.2",
     "mypy>=1.19.1",
     "prek>=0.3.2",
+    "pyrefly>=1,<2",
+    "pyright>=1.1.410,<1.2",
     "pytest>=9.0.2",
     "pytest-cov>=7.0.0",
     "ruff>=0.14.13",
+    "slotscheck>=0.19,<0.21",
+    "wemake-python-styleguide>=1.6.2,<2",
     "pydantic>=2 ; python_version < '3.15'",
 ]
 
@@ -75,9 +80,9 @@ entrypoint = "acodex.http.app:app"
 cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true, tags = true } }]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 strict = true
-exclude = ["^references/"]
+exclude = ["^references/", "^tmp/"]
 ignore_missing_imports = true
 local_partial_types = true
 warn_unreachable = true
@@ -102,6 +107,66 @@ disable_error_code = [
 module = ["tests.*"]
 strict = false
 disable_error_code = ["valid-type", "misc", "untyped-decorator", "attr-defined"]
+
+[tool.pyright]
+include = ["src/acodex", "tests"]
+exclude = ["references", "tmp", ".venv"]
+pythonVersion = "3.11"
+venvPath = "."
+venv = ".venv"
+typeCheckingMode = "basic"
+strict = ["src/acodex"]
+reportUnknownMemberType = false
+reportUnknownArgumentType = false
+reportUnknownVariableType = false
+reportMissingTypeStubs = false
+reportPrivateUsage = false
+
+[tool.pyrefly]
+project-includes = ["src/acodex", "tests"]
+project-excludes = ["references", "tmp", ".venv"]
+preset = "strict"
+min-severity = "warn"
+
+[tool.pyrefly.errors]
+implicit-any-attribute = false
+implicit-any-empty-container = false
+missing-attribute = false
+missing-override-decorator = false
+unused-ignore = true
+
+[tool.slotscheck]
+strict-imports = false
+exclude-classes = '''
+(
+  :.*Error
+  |:.*Exception
+  |acodex\.config\..*:.*Config
+  |acodex\.config\.models:.*Config
+  |acodex\.core\.codex_app\.bridge:CodexAppBridgeSettings
+  |acodex\.core\.codex_app\.cdp\.settings:CodexCDPSettings
+)
+'''
+
+[tool.codespell]
+skip = [
+    "__pycache__",
+    "_build",
+    ".mypy_cache",
+    "*.lock",
+    "references/**",
+    "tmp/**",
+]
+
+[tool.typos.files]
+extend-exclude = [
+    "__pycache__",
+    "_build",
+    ".mypy_cache",
+    "*.lock",
+    "references/**",
+    "tmp/**",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

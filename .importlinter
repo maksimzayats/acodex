@@ -1,0 +1,47 @@
+[importlinter]
+root_package = acodex
+include_external_packages = True
+exclude_type_checking_imports = True
+
+[importlinter:contract:core-independence]
+name = Core must not depend on transport, CLI, or wiring
+type = forbidden
+source_modules =
+  acodex.core
+forbidden_modules =
+  acodex.cli
+  acodex.http
+  acodex.ioc
+
+[importlinter:contract:http-independence]
+name = HTTP transport must not depend on CLI or wiring
+type = forbidden
+source_modules =
+  acodex.http
+forbidden_modules =
+  acodex.cli
+  acodex.ioc
+ignore_imports =
+  acodex.http.app -> acodex.ioc.http
+
+[importlinter:contract:cli-independence]
+name = CLI must not import HTTP transport
+type = forbidden
+source_modules =
+  acodex.cli
+forbidden_modules =
+  acodex.http
+
+[importlinter:contract:ioc-entrypoints]
+name = Only process entrypoints may import the container
+type = forbidden
+source_modules =
+  acodex.cli
+  acodex.config
+  acodex.core
+  acodex.http
+forbidden_modules =
+  acodex.ioc
+ignore_imports =
+  acodex.cli.__main__ -> acodex.ioc.container
+  acodex.http.app -> acodex.ioc.http

@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
 import pytest
-from typing_extensions import Self
 
 from acodex.cli import codex as codex_module
 from acodex.cli.codex import (
@@ -83,6 +82,15 @@ def test_status_reports_process_and_cdp() -> None:
     assert status["detected_cdp_port"] == 45217
     assert status["configured_cdp_url"] == "http://127.0.0.1:45217"
     assert status["cdp_reachable"] is True
+
+    stopped = CodexAppManager(
+        system_ops=FakeSystemOps([]),
+        cdp_probe=FakeCDPProbe([False]),
+        poll_interval=0.0,
+    ).status(config())
+    assert stopped["running"] is False
+    assert stopped["pid"] is None
+    assert stopped["detected_cdp_port"] is None
 
 
 def test_relaunch_noops_when_port_matches() -> None:
@@ -219,13 +227,15 @@ def test_system_ops_and_cdp_probe(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
 
     probe = CDPProbe()
     monkeypatch.setattr(
-        "acodex.cli.codex.urllib.request.urlopen",
+        codex_module.url_request,
+        "urlopen",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("down")),
     )
     assert not probe.reachable("http://127.0.0.1:45217", timeout=0.1)
 
     monkeypatch.setattr(
-        "acodex.cli.codex.urllib.request.urlopen",
+        codex_module.url_request,
+        "urlopen",
         lambda *_args, **_kwargs: FakeResponse(),
     )
     assert probe.reachable("http://127.0.0.1:45217", timeout=0.1)
