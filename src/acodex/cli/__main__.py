@@ -208,9 +208,7 @@ def _print_codex_status(status: dict[str, Any]) -> None:
     running = bool(status["running"])
     pid = status.get("pid")
     process = (
-        Text("Running", style="bold green")
-        if running
-        else Text("Not running", style="yellow")
+        Text("Running", style="bold green") if running else Text("Not running", style="yellow")
     )
     if running and pid is not None:
         process.append(f" (PID {pid})", style="dim")

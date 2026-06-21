@@ -196,10 +196,7 @@ def _codex_executable_paths(app_path: str) -> tuple[str, ...]:
     executable_names = [app.stem]
     if app.stem != "Codex":
         executable_names.append("Codex")
-    return tuple(
-        str(app / "Contents" / "MacOS" / executable)
-        for executable in executable_names
-    )
+    return tuple(str(app / "Contents" / "MacOS" / executable) for executable in executable_names)
 
 
 def _is_codex_app_process(command: str, executable_paths: tuple[str, ...]) -> bool:

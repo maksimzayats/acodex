@@ -160,11 +160,7 @@ class Doctor:
                 detail="/healthz",
                 fix=None
                 if healthy
-                else (
-                    _server_restart_fix(config)
-                    if running
-                    else _server_start_fix(config)
-                ),
+                else (_server_restart_fix(config) if running else _server_start_fix(config)),
             ),
         ]
         if deep and healthy and isinstance(status.get("mcp_url"), str):

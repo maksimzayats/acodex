@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+from io import StringIO
 from pathlib import Path
 from typing import Any
 
 import pytest
+from rich.console import Console
 from typer.testing import CliRunner
 
 from acodex.cli import __main__ as cli
@@ -13,6 +15,16 @@ from acodex.cli.server import ServerError, ServerState
 from acodex.config import AcodexConfig
 
 runner = CliRunner()
+
+
+def capture_console(monkeypatch: pytest.MonkeyPatch) -> StringIO:
+    output = StringIO()
+    monkeypatch.setattr(
+        cli,
+        "console",
+        Console(file=output, force_terminal=False, color_system=None, width=100),
+    )
+    return output
 
 
 class FakeDoctor:
@@ -150,6 +162,63 @@ def test_doctor_outputs_suggested_fixes(monkeypatch: pytest.MonkeyPatch) -> None
     assert "acodex server start" in result.stdout
 
 
+def test_doctor_output_helpers_cover_edge_cases(monkeypatch: pytest.MonkeyPatch) -> None:
+    output = capture_console(monkeypatch)
+    checks: list[dict[str, Any]] = [
+        {"name": "passed", "status": "pass", "detail": "ok"},
+        {"name": "unknown", "status": "mystery", "detail": "custom"},
+        {"name": "bad-fix", "status": "warn", "detail": "skip", "fix": "invalid"},
+        {
+            "name": "empty-fix",
+            "status": "warn",
+            "detail": "skip",
+            "fix": {"summary": " ", "command": " "},
+        },
+        {
+            "name": "detail-only",
+            "status": "warn",
+            "detail": "needs detail",
+            "fix": {"summary": "Read the detail", "detail": "More context"},
+        },
+        {
+            "name": "with-command",
+            "status": "warn",
+            "detail": "needs command",
+            "fix": {
+                "summary": "Run the command",
+                "detail": "Then retry.",
+                "command": "acodex server start",
+            },
+        },
+        {
+            "name": "duplicate-command",
+            "status": "warn",
+            "detail": "same fix",
+            "fix": {
+                "summary": "Run the command",
+                "detail": "Then retry.",
+                "command": "acodex server start",
+            },
+        },
+        {
+            "name": "failure",
+            "status": "fail",
+            "detail": "broken",
+            "fix": {"summary": "Fix the failure"},
+        },
+    ]
+
+    cli._print_doctor_result({"ok": False, "checks": checks})
+
+    rendered = output.getvalue()
+    assert "MYSTERY" in rendered
+    assert "Suggested fixes" in rendered
+    assert "Read the detail" in rendered
+    assert "Then retry." in rendered
+    assert "Fix the failure" in rendered
+    assert "1 failing check found" in rendered
+
+
 def test_codex_status_and_relaunch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     fake = FakeCodexManager()
     path = tmp_path / "config.json"
@@ -182,6 +251,59 @@ def test_codex_status_config_error(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert "Invalid JSON" in result.stderr
 
 
+def test_codex_status_warning_variants(monkeypatch: pytest.MonkeyPatch) -> None:
+    output = capture_console(monkeypatch)
+    base: dict[str, Any] = {
+        "app_path": "/Applications/Codex.app",
+        "detected_cdp_port": None,
+        "configured_cdp_url": "http://127.0.0.1:9222",
+    }
+
+    cli._print_codex_status(
+        base
+        | {
+            "app_exists": False,
+            "running": False,
+            "pid": None,
+            "cdp_reachable": False,
+        },
+    )
+    cli._print_codex_status(
+        base
+        | {
+            "app_exists": True,
+            "running": False,
+            "pid": None,
+            "cdp_reachable": False,
+        },
+    )
+    cli._print_codex_status(
+        base
+        | {
+            "app_exists": True,
+            "running": True,
+            "pid": None,
+            "cdp_reachable": False,
+        },
+    )
+    cli._print_codex_status(
+        base
+        | {
+            "app_exists": True,
+            "running": True,
+            "pid": 123,
+            "detected_cdp_port": 9222,
+            "cdp_reachable": True,
+        },
+    )
+
+    rendered = output.getvalue()
+    assert "Codex.app was not found" in rendered
+    assert "Codex is not running" in rendered
+    assert "CDP is not reachable" in rendered
+    assert "PID 123" in rendered
+
+
 def test_server_commands(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     fake = FakeServerManager()
     monkeypatch.setenv("ACODEX_CONFIG", str(tmp_path / "config.json"))
@@ -196,6 +318,10 @@ def test_server_commands(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Non
     failed = runner.invoke(cli.app, ["server", "start", "--host", "fail"])
     assert failed.exit_code == 1
     assert "start failed" in failed.stderr
+
+    not_stopped = runner.invoke(cli.app, ["server", "stop"])
+    assert not_stopped.exit_code == 0
+    assert "Managed server is not running" in not_stopped.stdout
 
     stopped = runner.invoke(cli.app, ["server", "stop", "--force"])
     assert stopped.exit_code == 0
@@ -214,6 +340,31 @@ def test_server_commands(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Non
 
     no_logs = runner.invoke(cli.app, ["server", "logs"])
     assert "No server log file found" in no_logs.stdout
+
+
+def test_server_status_optional_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    output = capture_console(monkeypatch)
+
+    cli._print_server_status(
+        {
+            "running": True,
+            "healthy": True,
+            "base_url": "http://127.0.0.1:8765",
+            "mcp_url": "http://127.0.0.1:8765/mcp",
+            "pid": 123,
+            "state_path": "run/server.json",
+            "log_path": "logs/server.log",
+        },
+    )
+    cli._print_server_status({"running": False, "state_path": "run/server.json"})
+    cli._print_success("Done", "detail line")
+
+    rendered = output.getvalue()
+    assert "Healthy" in rendered
+    assert "http://127.0.0.1:8765/mcp" in rendered
+    assert "run/server.json" in rendered
+    assert "logs/server.log" in rendered
+    assert "detail line" in rendered
 
 
 def test_server_stop_error_and_not_running_status(monkeypatch: pytest.MonkeyPatch) -> None:

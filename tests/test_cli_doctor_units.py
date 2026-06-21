@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from acodex.cli.codex import CodexAppManager
-from acodex.cli.doctor import Doctor, _check_writable_directory
+from acodex.cli.doctor import Doctor, DoctorFix, _check_writable_directory
 from acodex.cli.server import HttpProbe, ServerManager
 from acodex.config import AcodexConfig
 
@@ -87,9 +87,29 @@ def test_doctor_warns_without_running_services(tmp_path: Path) -> None:
     assert "server-mcp" not in statuses
     fixes = {check["name"]: check.get("fix") for check in result["checks"]}
     assert fixes["codex-app"]["command"].startswith("ACODEX_CODEX_APP_PATH=")
-    assert fixes["server"]["command"] == (
-        "acodex server start --host 127.0.0.1 --port 8765"
+    assert fixes["server"]["command"] == ("acodex server start --host 127.0.0.1 --port 8765")
+
+
+def test_doctor_reports_restart_fixes_for_unhealthy_running_server(tmp_path: Path) -> None:
+    result = Doctor(
+        config_path=tmp_path / "config.json",
+        codex_manager=FakeCodexManager(exists=True, running=False, cdp=False),
+        server_manager=FakeServerManager(tmp_path / "config.json", running=True, healthy=False),
+    ).run(deep=True)
+
+    fixes = {check["name"]: check.get("fix") for check in result["checks"]}
+    assert fixes["codex-process"]["command"] == "acodex codex relaunch --yes"
+    assert fixes["server-healthz"]["command"] == (
+        "acodex server stop --force && acodex server start --host 127.0.0.1 --port 8765"
     )
+    assert "server-mcp" not in {check["name"] for check in result["checks"]}
+
+
+def test_doctor_fix_json_omits_missing_command() -> None:
+    assert DoctorFix(summary="Read details", detail="Extra context").to_json() == {
+        "summary": "Read details",
+        "detail": "Extra context",
+    }
 
 
 def test_doctor_fails_invalid_config(tmp_path: Path) -> None:
