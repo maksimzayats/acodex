@@ -28,7 +28,7 @@ class CodexConfig(BaseModel):
 
     @property
     def cdp_url(self) -> str:
-        """Return the configured CDP base URL."""
+        """Configured CDP base URL."""
         return f"http://{self.cdp_host}:{self.cdp_port}"
 
 

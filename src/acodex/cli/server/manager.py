@@ -36,7 +36,7 @@ class ServerManager:
 
     @property
     def paths(self) -> ServerPaths:
-        """Return runtime paths derived from the effective config path."""
+        """Runtime paths derived from the effective config path."""
         root_path = config_root(self.config_path)
         return ServerPaths(
             state_path=root_path / "run" / "server.json",
@@ -66,7 +66,7 @@ class ServerManager:
         server_state = self.read_state()
         if server_state is None:
             return False
-        if not self.process_ops.is_running(server_state.pid):
+        if not self.process_ops.is_expected_process(server_state.pid, server_state.command):
             self.paths.state_path.unlink(missing_ok=True)
             return False
 
@@ -88,7 +88,7 @@ class ServerManager:
         server_state = self.read_state()
         if server_state is None:
             return {"running": False, "managed": False, "state_path": str(self.paths.state_path)}
-        running = self.process_ops.is_running(server_state.pid)
+        running = self.process_ops.is_expected_process(server_state.pid, server_state.command)
         healthy = running and self.http_probe.reachable(
             f"{server_state.base_url}{HEALTH_PATH}",
             timeout=STATUS_PROBE_TIMEOUT,
@@ -131,7 +131,7 @@ class ServerManager:
         server_state = self.read_state()
         if server_state is None:
             return
-        if self.process_ops.is_running(server_state.pid):
+        if self.process_ops.is_expected_process(server_state.pid, server_state.command):
             raise ServerError(
                 f"Managed server is already running at {server_state.base_url}",
             )

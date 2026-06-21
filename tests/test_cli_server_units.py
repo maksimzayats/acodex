@@ -23,6 +23,7 @@ class FakeProcessOps(ProcessOps):
     def __init__(self) -> None:
         self.running: set[int] = set()
         self.spawned: list[list[str]] = []
+        self.command_matches: dict[int, bool] = {}
         self.terminated: list[int] = []
         self.killed: list[int] = []
         self.next_pid = 123
@@ -30,10 +31,16 @@ class FakeProcessOps(ProcessOps):
     def is_running(self, pid: int) -> bool:
         return pid in self.running
 
+    def matches_command(self, pid: int, expected_command: list[str]) -> bool:
+        return (
+            bool(expected_command) and pid in self.running and self.command_matches.get(pid, True)
+        )
+
     def spawn(self, command: list[str], log_file: BinaryIO) -> int:
         self.spawned.append(command)
         log_file.write(b"started\n")
         self.running.add(self.next_pid)
+        self.command_matches[self.next_pid] = True
         return self.next_pid
 
     def terminate(self, pid: int) -> None:
@@ -174,6 +181,20 @@ def test_server_stop_paths(tmp_path: Path) -> None:
     assert not server.paths.state_path.exists()
 
 
+def test_server_stop_ignores_reused_stale_pid(tmp_path: Path) -> None:
+    process_ops = FakeProcessOps()
+    process_ops.running.add(123)
+    process_ops.command_matches[123] = False
+    server = manager(tmp_path, process_ops=process_ops, probe=FakeHttpProbe())
+    server.paths.state_path.parent.mkdir(parents=True)
+    server.state_store.write(server.paths.state_path, state())
+
+    assert not server.stop(force=True)
+    assert process_ops.terminated == []
+    assert process_ops.killed == []
+    assert not server.paths.state_path.exists()
+
+
 def test_server_stop_force(tmp_path: Path) -> None:
     process_ops = StickyProcessOps()
     process_ops.running.add(123)
@@ -216,6 +237,32 @@ def test_status_and_logs(tmp_path: Path) -> None:
     assert server.tail_logs(tail=2) == (server.paths.log_path, [])
 
 
+def test_status_clears_reused_stale_pid(tmp_path: Path) -> None:
+    process_ops = FakeProcessOps()
+    process_ops.running.add(123)
+    process_ops.command_matches[123] = False
+    server = manager(tmp_path, process_ops=process_ops, probe=FakeHttpProbe(reachable=True))
+    server.paths.state_path.parent.mkdir(parents=True)
+    server.state_store.write(server.paths.state_path, state())
+
+    status = server.status()
+
+    assert status["running"] is False
+    assert not server.paths.state_path.exists()
+
+
+def test_server_start_replaces_reused_stale_pid(tmp_path: Path) -> None:
+    process_ops = FakeProcessOps()
+    process_ops.running.add(999)
+    process_ops.command_matches[999] = False
+    server = manager(tmp_path, process_ops=process_ops, probe=FakeHttpProbe())
+    server.paths.state_path.parent.mkdir(parents=True)
+    server.state_store.write(server.paths.state_path, state(pid=999))
+
+    assert server.start(AcodexConfig()).pid == 123
+    assert process_ops.spawned != []
+
+
 def test_state_json_invalid_and_custom_config(tmp_path: Path) -> None:
     server = manager(tmp_path, process_ops=FakeProcessOps(), probe=FakeHttpProbe())
     server.paths.state_path.parent.mkdir(parents=True)
@@ -235,10 +282,30 @@ def test_state_json_invalid_and_custom_config(tmp_path: Path) -> None:
 def test_process_ops_and_http_probe_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     ops = ProcessOps()
     assert not ops.is_running(-1)
+    assert not ops.is_expected_process(-1, ["uvicorn"])
+    assert ops.command_line(-1) is None
     monkeypatch.setattr(os, "kill", lambda _pid, _sig: (_ for _ in ()).throw(ProcessLookupError()))
     assert not ops.is_running(123)
     monkeypatch.setattr(os, "kill", lambda _pid, _sig: (_ for _ in ()).throw(PermissionError()))
     assert ops.is_running(123)
+    assert not ops.matches_command(123, [])
+    monkeypatch.setattr(
+        process_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            process_module.subprocess.CalledProcessError(1, ["/bin/ps"]),
+        ),
+    )
+    assert ops.command_line(123) is None
+    assert not ops.matches_command(123, ["uvicorn"])
+
+    class EmptyCompleted:
+        stdout = "\n"
+
+    monkeypatch.setattr(
+        process_module.subprocess, "run", lambda *_args, **_kwargs: EmptyCompleted()
+    )
+    assert ops.command_line(123) is None
 
     probe = HttpProbe()
     monkeypatch.setattr(
@@ -270,21 +337,38 @@ def test_process_ops_and_http_probe_success(monkeypatch: pytest.MonkeyPatch) -> 
 
     popen_calls: list[dict[str, Any]] = []
     kill_calls: list[tuple[int, int]] = []
+    run_calls: list[list[str]] = []
 
     def popen(command: list[str], **kwargs: Any) -> FakeProcess:
         popen_calls.append({"command": command, **kwargs})
         return FakeProcess()
 
+    def run(command: list[str], **kwargs: Any) -> object:
+        run_calls.append(command)
+
+        class Completed:
+            stdout = "/usr/bin/python -m uvicorn acodex.http.app:app\n"
+
+        return Completed()
+
     ops = ProcessOps()
     monkeypatch.setattr(process_module.subprocess, "Popen", popen)
+    monkeypatch.setattr(process_module.subprocess, "run", run)
     monkeypatch.setattr(os, "kill", lambda pid, sig: kill_calls.append((pid, sig)))
 
     assert ops.is_running(321)
+    assert ops.command_line(321) == "/usr/bin/python -m uvicorn acodex.http.app:app"
+    assert ops.matches_command(
+        321,
+        ["/usr/bin/python", "-m", "uvicorn", "acodex.http.app:app"],
+    )
+    assert not ops.matches_command(321, ["/other/python", "-m", "uvicorn"])
     assert ops.spawn(["uvicorn"], cast("BinaryIO", BinaryLog())) == 321
     ops.terminate(321)
     ops.kill(321)
     assert popen_calls[0]["command"] == ["uvicorn"]
-    assert len(kill_calls) == 3
+    assert run_calls[0][:3] == ["/bin/ps", "-p", "321"]
+    assert len(kill_calls) == 6
 
     monkeypatch.setattr(
         probe_module.url_request,

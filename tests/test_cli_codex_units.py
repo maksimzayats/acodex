@@ -138,6 +138,47 @@ def test_relaunch_launches_when_not_running_and_handles_timeout() -> None:
         failing.relaunch(timeout_config(), confirmed=False)
 
 
+def test_relaunch_reports_missing_app_before_launch() -> None:
+    ops = FakeSystemOps([], exists=False)
+    manager = CodexAppManager(system_ops=ops, cdp_probe=FakeCDPProbe([True]), poll_interval=0.0)
+
+    with pytest.raises(CodexAppError, match="does not exist"):
+        manager.relaunch(config(), confirmed=False)
+
+    assert ops.launched == []
+
+
+def test_relaunch_reports_open_failure() -> None:
+    class FailingSystemOps(FakeSystemOps):
+        def launch_app(self, app_path: str, *, port: int) -> None:
+            raise codex_module.subprocess.CalledProcessError(1, ["/usr/bin/open", app_path])
+
+    manager = CodexAppManager(
+        system_ops=FailingSystemOps([]),
+        cdp_probe=FakeCDPProbe([True]),
+        poll_interval=0.0,
+    )
+
+    with pytest.raises(CodexAppError, match="Unable to launch Codex"):
+        manager.relaunch(config(), confirmed=False)
+
+
+def test_relaunch_reports_quit_failure() -> None:
+    class FailingSystemOps(FakeSystemOps):
+        def quit_app(self) -> None:
+            raise codex_module.subprocess.CalledProcessError(1, ["/usr/bin/osascript"])
+
+    ops = FailingSystemOps(
+        [
+            ProcessInfo(pid=1, command="/Applications/Codex.app/Contents/MacOS/Codex"),
+        ],
+    )
+    manager = CodexAppManager(system_ops=ops, cdp_probe=FakeCDPProbe([True]), poll_interval=0.0)
+
+    with pytest.raises(CodexAppError, match="Unable to quit Codex"):
+        manager.relaunch(config(), confirmed=True)
+
+
 def test_find_codex_process_matches_variants() -> None:
     manager = CodexAppManager(
         system_ops=FakeSystemOps(

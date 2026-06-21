@@ -146,12 +146,16 @@ class CodexAppManager:
         process = self.find_codex_process(config.codex.app_path)
         if process is not None and detect_cdp_port(process.command) == config.codex.cdp_port:
             return "Codex is already running with CDP port {}".format(config.codex.cdp_port)
+        if not self.system_ops.app_exists(config.codex.app_path):
+            raise CodexAppError(
+                "Codex app bundle does not exist: {}".format(config.codex.app_path),
+            )
         if process is not None and not confirmed:
             raise CodexAppError("Codex is running without the configured CDP port")
         if process is not None:
-            self.system_ops.quit_app()
+            self._quit_running_app()
             self._wait_until_stopped(config.codex.app_path, timeout=config.codex.launch_timeout)
-        self.system_ops.launch_app(config.codex.app_path, port=config.codex.cdp_port)
+        self._launch_app(config)
         if not self.wait_for_cdp(config):
             raise CodexAppError(
                 "Codex CDP did not become reachable at {}".format(config.codex.cdp_url)
@@ -191,6 +195,20 @@ class CodexAppManager:
             if self.find_codex_process(app_path) is None:
                 return
             time.sleep(self.poll_interval)
+
+    def _quit_running_app(self) -> None:
+        try:
+            self.system_ops.quit_app()
+        except (OSError, subprocess.CalledProcessError) as exc:
+            raise CodexAppError("Unable to quit Codex before relaunch") from exc
+
+    def _launch_app(self, config: AcodexConfig) -> None:
+        try:
+            self.system_ops.launch_app(config.codex.app_path, port=config.codex.cdp_port)
+        except (OSError, subprocess.CalledProcessError) as exc:
+            raise CodexAppError(
+                "Unable to launch Codex from {}".format(config.codex.app_path),
+            ) from exc
 
 
 def detect_cdp_port(command: str) -> int | None:

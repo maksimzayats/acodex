@@ -118,7 +118,7 @@ class OptionTokenStream:
 
     @property
     def has_next(self) -> bool:
-        """Return whether another token is available."""
+        """Whether another token is available."""
         return self.index < len(self.tokens)
 
     def next_argument(self) -> tuple[str, Any]:
