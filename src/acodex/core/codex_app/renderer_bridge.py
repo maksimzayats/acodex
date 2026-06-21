@@ -11,10 +11,16 @@ def renderer_expression(payload: dict[str, Any]) -> str:
         A renderer-evaluable JavaScript expression.
 
     """
-    return f"""
+    return BRIDGE_EXPRESSION.format(
+        bridge_script=BRIDGE_SCRIPT,
+        payload=json.dumps(payload),
+    )
+
+
+BRIDGE_EXPRESSION = """
 (async () => {{
-  const config = {json.dumps(payload)};
-  {BRIDGE_SCRIPT}
+  const config = {payload};
+  {bridge_script}
   return JSON.stringify(await runCodexAppMcpBridge(config));
 }})()
 """
