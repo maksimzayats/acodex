@@ -125,7 +125,7 @@ def test_renderer_asset_discovery_falls_back_to_renderer_scan() -> None:
             "manager": "app://-/manager.js",
         },
     )
-    assert run(assets._discover_assets_in_renderer(cast("CodexCDPClient", cdp))) == {
+    assert run(assets.RendererFallbackScanner().scan(cast("CodexCDPClient", cdp))) == {
         "app_scope": "app://-/scope.js",
         "dynamic_tools": "app://-/dynamic.js",
         "manager": "app://-/manager.js",
@@ -150,36 +150,38 @@ def test_renderer_asset_discovery_errors_and_helpers() -> None:
             ),
         )
 
-    assert assets._missing_required_assets({"app_scope": "x"}) == ["dynamic_tools", "manager"]
-    assert assets._string_dict("not a dict") == {}
-    assert assets._string_dict({"good": "value", "bad": 1, 2: "number-key"}) == {
+    assert assets.AssetMatchRecorder().missing_required({"app_scope": "x"}) == [
+        "dynamic_tools",
+        "manager",
+    ]
+    assert assets.string_dict("not a dict") == {}
+    assert assets.string_dict({"good": "value", "bad": 1, 2: "number-key"}) == {
         "good": "value",
         "2": "number-key",
     }
-    assert assets._collect_javascript_resources(
-        {
-            "frame": {"id": "root"},
-            "resources": [
-                {"url": "app://-/a.js"},
-                {"url": "app://-/b", "type": "Script"},
-                {"url": "app://-/c", "mimeType": "text/javascript"},
-                {"url": "app://-/style.css", "type": "Stylesheet"},
-                {"url": 1, "type": "Script"},
-                "bad",
-            ],
-            "childFrames": [
-                {
-                    "frame": {"id": 1},
-                    "resources": [{"url": "app://-/ignored.js"}],
-                },
-                {
-                    "frame": {"id": "child"},
-                    "resources": [{"url": "app://-/child.js"}],
-                    "childFrames": ["bad"],
-                },
-            ],
-        },
-    ) == [
+    resources = assets.ResourceTreeScanner().collect({
+        "frame": {"id": "root"},
+        "resources": [
+            {"url": "app://-/a.js"},
+            {"url": "app://-/b", "type": "Script"},
+            {"url": "app://-/c", "mimeType": "text/javascript"},
+            {"url": "app://-/style.css", "type": "Stylesheet"},
+            {"url": 1, "type": "Script"},
+            "bad",
+        ],
+        "childFrames": [
+            {
+                "frame": {"id": 1},
+                "resources": [{"url": "app://-/ignored.js"}],
+            },
+            {
+                "frame": {"id": "child"},
+                "resources": [{"url": "app://-/child.js"}],
+                "childFrames": ["bad"],
+            },
+        ],
+    })
+    assert [(resource.frame_id, resource.url) for resource in resources] == [
         ("root", "app://-/a.js"),
         ("root", "app://-/b"),
         ("root", "app://-/c"),

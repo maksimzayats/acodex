@@ -63,18 +63,3 @@ class MCPResultAdapter:
 
     def _text_payload(self, text_payload: str) -> dict[str, Any]:
         return {TYPE_KEY: TEXT_TYPE, TEXT_KEY: text_payload}
-
-
-def _codex_result_to_mcp(codex_result: dict[str, Any]) -> dict[str, Any]:
-    return MCPResultAdapter().adapt(codex_result)
-
-
-def _content_item_to_mcp(content_item: Any) -> dict[str, Any]:
-    return MCPResultAdapter().content_item(content_item)
-
-
-__all__ = (
-    "MCPResultAdapter",
-    "_codex_result_to_mcp",
-    "_content_item_to_mcp",
-)

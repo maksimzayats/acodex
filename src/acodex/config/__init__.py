@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from acodex.config.compat import deep_merge as _deep_merge
 from acodex.config.initializer import ConfigInitializer, init_config
 from acodex.config.loader import ConfigFileReader, ConfigLoader, default_config, load_config
 from acodex.config.models import (
@@ -38,7 +37,6 @@ __all__ = (
     "EnvironmentField",
     "EnvironmentOverrideProvider",
     "ServerConfig",
-    "_deep_merge",
     "config_root",
     "default_config",
     "get_config_path",

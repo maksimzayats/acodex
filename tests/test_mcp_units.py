@@ -12,12 +12,9 @@ from starlette.requests import Request
 from acodex.core.codex_app.bridge import CodexAppBridge
 from acodex.core.codex_app.cdp import CodexCDPSettings
 from acodex.http.mcp import routes
-from acodex.http.mcp.handler import (
-    MCP_PROTOCOL_VERSION,
-    MCPRequestsHandler,
-    _codex_result_to_mcp,
-    _content_item_to_mcp,
-)
+from acodex.http.mcp.constants import MCP_PROTOCOL_VERSION
+from acodex.http.mcp.handler import MCPRequestsHandler
+from acodex.http.mcp.result_adapter import MCPResultAdapter
 
 
 def run(coro: Any) -> Any:
@@ -356,21 +353,23 @@ def test_handler_reports_jsonrpc_errors() -> None:
     )
 
 
-def test_codex_result_to_mcp_content_shapes() -> None:
-    assert _content_item_to_mcp({"value": 1}) == {"type": "text", "text": '{"value": 1}'}
-    assert _codex_result_to_mcp({"content": "hello", "isError": True}) == {
+def test_result_adapter_content_shapes() -> None:
+    adapter = MCPResultAdapter()
+
+    assert adapter.content_item({"value": 1}) == {"type": "text", "text": '{"value": 1}'}
+    assert adapter.adapt({"content": "hello", "isError": True}) == {
         "content": [{"type": "text", "text": "hello"}],
         "isError": True,
     }
     existing = [{"type": "text", "text": "already converted"}]
-    assert _codex_result_to_mcp({"content": existing}) == {"content": existing, "isError": False}
-    assert _codex_result_to_mcp({
+    assert adapter.adapt({"content": existing}) == {"content": existing, "isError": False}
+    assert adapter.adapt({
         "contentItems": ["raw", {"type": "inputText", "text": "typed"}],
     }) == {
         "content": [{"type": "text", "text": "raw"}, {"type": "text", "text": "typed"}],
         "isError": False,
     }
-    assert _codex_result_to_mcp({
+    assert adapter.adapt({
         "contentItems": [{"text": "plain"}, {"value": 1}],
         "success": False,
     }) == {
@@ -380,7 +379,7 @@ def test_codex_result_to_mcp_content_shapes() -> None:
         ],
         "isError": True,
     }
-    assert _codex_result_to_mcp({"value": 1}) == {
+    assert adapter.adapt({"value": 1}) == {
         "content": [{"type": "text", "text": '{"value": 1}'}],
         "isError": False,
     }

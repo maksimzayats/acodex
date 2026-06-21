@@ -6,7 +6,6 @@ from typing import Any, BinaryIO, Self, cast
 
 import pytest
 
-from acodex.cli import server as server_module
 from acodex.cli.server import (
     HttpProbe,
     ProcessOps,
@@ -14,6 +13,8 @@ from acodex.cli.server import (
     ServerManager,
     ServerState,
     SocketPortChecker,
+    probe as probe_module,
+    process as process_module,
 )
 from acodex.config import AcodexConfig, ServerConfig
 
@@ -241,7 +242,8 @@ def test_process_ops_and_http_probe_errors(monkeypatch: pytest.MonkeyPatch) -> N
 
     probe = HttpProbe()
     monkeypatch.setattr(
-        "acodex.cli.server.urllib.request.urlopen",
+        probe_module.url_request,
+        "urlopen",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("down")),
     )
     assert not probe.reachable("http://127.0.0.1:1", timeout=0.1)
@@ -274,7 +276,7 @@ def test_process_ops_and_http_probe_success(monkeypatch: pytest.MonkeyPatch) -> 
         return FakeProcess()
 
     ops = ProcessOps()
-    monkeypatch.setattr(server_module.subprocess, "Popen", popen)
+    monkeypatch.setattr(process_module.subprocess, "Popen", popen)
     monkeypatch.setattr(os, "kill", lambda pid, sig: kill_calls.append((pid, sig)))
 
     assert ops.is_running(321)
@@ -285,7 +287,8 @@ def test_process_ops_and_http_probe_success(monkeypatch: pytest.MonkeyPatch) -> 
     assert len(kill_calls) == 3
 
     monkeypatch.setattr(
-        "acodex.cli.server.urllib.request.urlopen",
+        probe_module.url_request,
+        "urlopen",
         lambda *_args, **_kwargs: FakeResponse(),
     )
     probe = HttpProbe()

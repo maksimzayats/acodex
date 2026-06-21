@@ -6,7 +6,14 @@ from pathlib import Path
 import pytest
 
 from acodex import config as config_module
-from acodex.config import ConfigError, default_config, get_config_path, init_config, load_config
+from acodex.config import (
+    ConfigError,
+    ConfigMerger,
+    default_config,
+    get_config_path,
+    init_config,
+    load_config,
+)
 
 
 def test_default_config_shape_and_settings() -> None:
@@ -119,4 +126,4 @@ def test_config_read_os_error_and_empty_merge(
     with pytest.raises(ConfigError, match="Could not read"):
         load_config(config_path=path)
 
-    assert config_module._deep_merge({"a": 1}, {"b": {}}) == {"a": 1}
+    assert ConfigMerger().deep_merge({"a": 1}, {"b": {}}) == {"a": 1}

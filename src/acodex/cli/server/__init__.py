@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import subprocess  # noqa: S404 - re-exported for compatibility monkeypatching.
-import urllib
-
 from acodex.cli.server.manager import ServerManager
 from acodex.cli.server.models import ServerError, ServerPaths, ServerState
 from acodex.cli.server.probe import HttpProbe, SocketPortChecker
@@ -18,6 +15,4 @@ __all__ = (
     "ServerState",
     "ServerStateStore",
     "SocketPortChecker",
-    "subprocess",
-    "urllib",
 )

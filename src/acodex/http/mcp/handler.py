@@ -13,11 +13,8 @@ from acodex.http.mcp.constants import (
     JSONRPC_INVALID_PARAMS,
     JSONRPC_METHOD_NOT_FOUND,
     JSONRPC_VERSION,
-    MCP_PROTOCOL_VERSION,
-    SUPPORTED_PROTOCOL_VERSIONS,
 )
 from acodex.http.mcp.dispatcher import MCPDispatcher, MethodNotFoundError
-from acodex.http.mcp.result_adapter import _codex_result_to_mcp, _content_item_to_mcp
 
 
 @dataclass(kw_only=True, slots=True)
@@ -79,12 +76,3 @@ class MCPRequestsHandler:
             id=jsonrpc_message.id,
             error=ErrorData(code=code, message=message_text),
         )
-
-
-__all__ = (
-    "MCP_PROTOCOL_VERSION",
-    "SUPPORTED_PROTOCOL_VERSIONS",
-    "MCPRequestsHandler",
-    "_codex_result_to_mcp",
-    "_content_item_to_mcp",
-)

@@ -8,7 +8,12 @@ from typing import Any, Self, cast
 import pytest
 
 from acodex.core.codex_app import cdp as cdp_module
-from acodex.core.codex_app.cdp import CodexCDPClient, CodexCDPError, CodexCDPSettings
+from acodex.core.codex_app.cdp import (
+    CodexCDPClient,
+    CodexCDPError,
+    CodexCDPSettings,
+    targets as target_module,
+)
 
 
 def run(coro: Any) -> Any:
@@ -294,7 +299,7 @@ def test_find_codex_target(monkeypatch: pytest.MonkeyPatch) -> None:
             raise payload
         return FakeResponse(payload)
 
-    monkeypatch.setattr(cdp_module.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(target_module.url_request, "urlopen", urlopen)
 
     with pytest.raises(CodexCDPError, match="Could not reach Codex CDP"):
         client._find_codex_target()
