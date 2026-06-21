@@ -72,9 +72,9 @@ def state(pid: int = 123) -> ServerState:
     return ServerState(
         pid=pid,
         host="127.0.0.1",
-        port=8765,
-        base_url="http://127.0.0.1:8765",
-        mcp_url="http://127.0.0.1:8765/mcp",
+        port=45218,
+        base_url="http://127.0.0.1:45218",
+        mcp_url="http://127.0.0.1:45218/mcp",
         started_at=1.0,
         log_path="server.log",
         command=["uvicorn"],
@@ -89,12 +89,12 @@ def test_server_start_writes_state_and_logs(tmp_path: Path) -> None:
     result = server.start(AcodexConfig())
 
     assert result.pid == 123
-    assert result.base_url == "http://127.0.0.1:8765"
-    assert result.mcp_url == "http://127.0.0.1:8765/mcp"
-    assert process_ops.spawned[0][-2:] == ["--port", "8765"]
+    assert result.base_url == "http://127.0.0.1:45218"
+    assert result.mcp_url == "http://127.0.0.1:45218/mcp"
+    assert process_ops.spawned[0][-2:] == ["--port", "45218"]
     assert server.read_state() == result
     assert server.paths.log_path.read_bytes() == b"started\n"
-    assert probe.urls == ["http://127.0.0.1:8765/healthz"]
+    assert probe.urls == ["http://127.0.0.1:45218/healthz"]
 
 
 def test_server_start_handles_stale_and_running_state(tmp_path: Path) -> None:
@@ -181,7 +181,7 @@ def test_status_and_logs(tmp_path: Path) -> None:
     status = server.status()
     assert status["running"] is True
     assert status["healthy"] is True
-    assert status["base_url"] == "http://127.0.0.1:8765"
+    assert status["base_url"] == "http://127.0.0.1:45218"
     assert server.tail_logs(tail=2)[1] == ["two", "three"]
 
     process_ops.running.clear()
@@ -263,8 +263,8 @@ def test_process_ops_and_http_probe_success(monkeypatch: pytest.MonkeyPatch) -> 
         lambda *_args, **_kwargs: FakeResponse(),
     )
     probe = HttpProbe()
-    assert probe.reachable("http://127.0.0.1:8765/healthz", timeout=0.1)
-    assert probe.mcp_initialize("http://127.0.0.1:8765/mcp", timeout=0.1)
+    assert probe.reachable("http://127.0.0.1:45218/healthz", timeout=0.1)
+    assert probe.mcp_initialize("http://127.0.0.1:45218/mcp", timeout=0.1)
 
 
 def test_state_from_json_defaults_command() -> None:

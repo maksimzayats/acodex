@@ -60,8 +60,8 @@ def timeout_config() -> AcodexConfig:
 
 
 def test_detect_cdp_port() -> None:
-    assert detect_cdp_port("--remote-debugging-port=5633") == 5633
-    assert detect_cdp_port("--remote-debugging-port 5634") == 5634
+    assert detect_cdp_port("--remote-debugging-port=45217") == 45217
+    assert detect_cdp_port("--remote-debugging-port 45218") == 45218
     assert detect_cdp_port("no port") is None
 
 
@@ -69,7 +69,7 @@ def test_status_reports_process_and_cdp() -> None:
     ops = FakeSystemOps([
         ProcessInfo(
             pid=42,
-            command="/Applications/Codex.app/Contents/MacOS/Codex --remote-debugging-port=5633",
+            command="/Applications/Codex.app/Contents/MacOS/Codex --remote-debugging-port=45217",
         ),
     ])
     probe = FakeCDPProbe([True])
@@ -80,8 +80,8 @@ def test_status_reports_process_and_cdp() -> None:
     assert status["app_exists"] is True
     assert status["running"] is True
     assert status["pid"] == 42
-    assert status["detected_cdp_port"] == 5633
-    assert status["configured_cdp_url"] == "http://127.0.0.1:5633"
+    assert status["detected_cdp_port"] == 45217
+    assert status["configured_cdp_url"] == "http://127.0.0.1:45217"
     assert status["cdp_reachable"] is True
 
 
@@ -89,13 +89,13 @@ def test_relaunch_noops_when_port_matches() -> None:
     ops = FakeSystemOps([
         ProcessInfo(
             pid=1,
-            command="/Applications/Codex.app/Contents/MacOS/Codex --remote-debugging-port=5633",
+            command="/Applications/Codex.app/Contents/MacOS/Codex --remote-debugging-port=45217",
         ),
     ])
     manager = CodexAppManager(system_ops=ops, cdp_probe=FakeCDPProbe(), poll_interval=0.0)
 
     assert (
-        manager.relaunch(config(), confirmed=False) == "Codex is already running with CDP port 5633"
+        manager.relaunch(config(), confirmed=False) == "Codex is already running with CDP port 45217"
     )
     assert ops.launched == []
 
@@ -113,16 +113,16 @@ def test_relaunch_requires_confirmation_and_restarts() -> None:
     with pytest.raises(CodexAppError, match="without the configured"):
         manager.relaunch(config(), confirmed=False)
 
-    assert manager.relaunch(config(), confirmed=True) == "Codex launched with CDP port 5633"
+    assert manager.relaunch(config(), confirmed=True) == "Codex launched with CDP port 45217"
     assert ops.quit_calls == 1
-    assert ops.launched == [("/Applications/Codex.app", 5633)]
+    assert ops.launched == [("/Applications/Codex.app", 45217)]
 
 
 def test_relaunch_launches_when_not_running_and_handles_timeout() -> None:
     ops = FakeSystemOps([])
     manager = CodexAppManager(system_ops=ops, cdp_probe=FakeCDPProbe([True]), poll_interval=0.0)
 
-    assert manager.relaunch(config(), confirmed=False) == "Codex launched with CDP port 5633"
+    assert manager.relaunch(config(), confirmed=False) == "Codex launched with CDP port 45217"
 
     failing = CodexAppManager(system_ops=ops, cdp_probe=FakeCDPProbe([False]), poll_interval=0.0)
     with pytest.raises(CodexAppError, match="did not become reachable"):
@@ -179,14 +179,14 @@ def test_relaunch_ignores_stale_codex_helper_processes() -> None:
     )
     manager = CodexAppManager(system_ops=ops, cdp_probe=FakeCDPProbe([True]), poll_interval=0.0)
 
-    assert manager.relaunch(config(), confirmed=False) == "Codex launched with CDP port 5633"
+    assert manager.relaunch(config(), confirmed=False) == "Codex launched with CDP port 45217"
     assert ops.quit_calls == 0
-    assert ops.launched == [("/Applications/Codex.app", 5633)]
+    assert ops.launched == [("/Applications/Codex.app", 45217)]
 
 
 def test_system_ops_and_cdp_probe(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     class Completed:
-        stdout = "  10 /Applications/Codex.app --remote-debugging-port=5633\n\nbad\n"
+        stdout = "  10 /Applications/Codex.app --remote-debugging-port=45217\n\nbad\n"
 
     class FakeResponse:
         status = 204
@@ -206,13 +206,13 @@ def test_system_ops_and_cdp_probe(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     monkeypatch.setattr(codex_module.subprocess, "run", run)
     ops = CodexSystemOps()
     assert ops.list_processes() == [
-        ProcessInfo(pid=10, command="/Applications/Codex.app --remote-debugging-port=5633"),
+        ProcessInfo(pid=10, command="/Applications/Codex.app --remote-debugging-port=45217"),
     ]
     app = tmp_path / "Codex.app"
     app.mkdir()
     assert ops.app_exists(str(app))
     ops.quit_app()
-    ops.launch_app(str(app), port=5633)
+    ops.launch_app(str(app), port=45217)
     assert calls[1][0] == "/usr/bin/osascript"
     assert calls[2][0] == "/usr/bin/open"
 
@@ -221,13 +221,13 @@ def test_system_ops_and_cdp_probe(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
         "acodex.cli.codex.urllib.request.urlopen",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("down")),
     )
-    assert not probe.reachable("http://127.0.0.1:5633", timeout=0.1)
+    assert not probe.reachable("http://127.0.0.1:45217", timeout=0.1)
 
     monkeypatch.setattr(
         "acodex.cli.codex.urllib.request.urlopen",
         lambda *_args, **_kwargs: FakeResponse(),
     )
-    assert probe.reachable("http://127.0.0.1:5633", timeout=0.1)
+    assert probe.reachable("http://127.0.0.1:45217", timeout=0.1)
 
 
 def test_wait_until_stopped_polls_until_process_disappears() -> None:

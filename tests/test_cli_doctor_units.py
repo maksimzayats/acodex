@@ -49,8 +49,8 @@ class FakeServerManager(ServerManager):
             "running": self.running,
             "managed": self.running,
             "healthy": self.healthy,
-            "base_url": "http://127.0.0.1:8765",
-            "mcp_url": "http://127.0.0.1:8765/mcp",
+            "base_url": "http://127.0.0.1:45218",
+            "mcp_url": "http://127.0.0.1:45218/mcp",
         }
 
 
@@ -87,7 +87,7 @@ def test_doctor_warns_without_running_services(tmp_path: Path) -> None:
     assert "server-mcp" not in statuses
     fixes = {check["name"]: check.get("fix") for check in result["checks"]}
     assert fixes["codex-app"]["command"].startswith("ACODEX_CODEX_APP_PATH=")
-    assert fixes["server"]["command"] == ("acodex server start --host 127.0.0.1 --port 8765")
+    assert fixes["server"]["command"] == ("acodex server start --host 127.0.0.1 --port 45218")
 
 
 def test_doctor_reports_restart_fixes_for_unhealthy_running_server(tmp_path: Path) -> None:
@@ -100,7 +100,7 @@ def test_doctor_reports_restart_fixes_for_unhealthy_running_server(tmp_path: Pat
     fixes = {check["name"]: check.get("fix") for check in result["checks"]}
     assert fixes["codex-process"]["command"] == "acodex codex relaunch --yes"
     assert fixes["server-healthz"]["command"] == (
-        "acodex server stop --force && acodex server start --host 127.0.0.1 --port 8765"
+        "acodex server stop --force && acodex server start --host 127.0.0.1 --port 45218"
     )
     assert "server-mcp" not in {check["name"] for check in result["checks"]}
 

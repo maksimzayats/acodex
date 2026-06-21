@@ -13,18 +13,18 @@ def test_default_config_shape_and_settings() -> None:
     config = default_config()
 
     assert config.model_dump(mode="json") == {
-        "server": {"host": "127.0.0.1", "port": 8765},
+        "server": {"host": "127.0.0.1", "port": 45218},
         "codex": {
             "app_path": "/Applications/Codex.app",
             "cdp_host": "127.0.0.1",
-            "cdp_port": 5633,
+            "cdp_port": 45217,
             "request_timeout": 10.0,
             "launch_timeout": 20.0,
         },
         "bridge": {"host_id": "local", "source_thread_id": None},
     }
-    assert config.codex.cdp_url == "http://127.0.0.1:5633"
-    assert config.to_cdp_settings().base_url == "http://127.0.0.1:5633"
+    assert config.codex.cdp_url == "http://127.0.0.1:45217"
+    assert config.to_cdp_settings().base_url == "http://127.0.0.1:45217"
     assert config.to_bridge_settings().host_id == "local"
 
 
@@ -102,7 +102,7 @@ def test_invalid_config_errors(tmp_path: Path) -> None:
         load_config(config_path=extra)
 
     missing = tmp_path / "missing" / "config.json"
-    assert load_config(config_path=missing).server.port == 8765
+    assert load_config(config_path=missing).server.port == 45218
 
 
 def test_config_read_os_error_and_empty_merge(

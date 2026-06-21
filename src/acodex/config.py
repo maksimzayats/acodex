@@ -17,7 +17,7 @@ class ServerConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     host: str = "127.0.0.1"
-    port: int = 8765
+    port: int = 45218
 
 
 class CodexConfig(BaseModel):
@@ -25,7 +25,7 @@ class CodexConfig(BaseModel):
 
     app_path: str = "/Applications/Codex.app"
     cdp_host: str = "127.0.0.1"
-    cdp_port: int = 5633
+    cdp_port: int = 45217
     request_timeout: float = 10.0
     launch_timeout: float = 20.0
 

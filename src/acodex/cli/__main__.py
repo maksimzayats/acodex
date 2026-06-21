@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import inspect
 import json
+from collections.abc import Callable
 from pathlib import Path
-from typing import Annotated, Any, NoReturn
+from typing import Annotated, Any, NoReturn, TypeVar, get_type_hints
 
 import typer
+from diwire import Injected, Scope, resolver_context
 from rich import box
 from rich.console import Console, RenderableType
 from rich.panel import Panel
@@ -14,18 +17,44 @@ from rich.text import Text
 from acodex.cli.codex import CodexAppError, CodexAppManager
 from acodex.cli.doctor import Doctor
 from acodex.cli.server import ServerError, ServerManager
+from acodex.cli.tools import ToolArgumentsError, ToolOutput, ToolsCommand
 from acodex.config import ConfigError, get_config_path, init_config, load_config
+from acodex.core.mcp_tools import MCPToolClientError
+from acodex.ioc.container import get_cli_container
 
 app = typer.Typer(no_args_is_help=True)
 config_app = typer.Typer(no_args_is_help=True)
 codex_app = typer.Typer(no_args_is_help=True)
 server_app = typer.Typer(no_args_is_help=True)
+tools_app = typer.Typer(no_args_is_help=True)
 app.add_typer(config_app, name="config")
 app.add_typer(codex_app, name="codex")
 app.add_typer(server_app, name="server")
+app.add_typer(tools_app, name="tools")
 
 console = Console()
 error_console = Console(stderr=True)
+_T = TypeVar("_T", bound=Callable[..., Any])
+
+
+def _runtime_typer_signature(command: _T) -> _T:
+    signature = inspect.signature(command)
+    annotations = get_type_hints(command, include_extras=True)
+    parameters = [
+        parameter.replace(annotation=annotations.get(parameter.name, parameter.annotation))
+        for parameter in signature.parameters.values()
+    ]
+    return_annotation = annotations.get("return", signature.return_annotation)
+    command.__signature__ = signature.replace(  # type: ignore[attr-defined]
+        parameters=parameters,
+        return_annotation=return_annotation,
+    )
+    return command
+
+
+@app.callback()
+def configure_cli_dependencies() -> None:
+    get_cli_container()
 
 
 @app.command()
@@ -150,6 +179,67 @@ def server_logs(
     console.print(Text.assemble(("Server logs", "bold cyan"), (f"  {log_path}", "dim")))
     for line in lines:
         console.print(line, highlight=False, markup=False)
+
+
+@tools_app.command("list")
+@resolver_context.inject(scope=Scope.REQUEST)
+def tools_list(
+    *,
+    json_output: Annotated[bool, typer.Option("--json", help="Emit JSON output.")] = False,
+    command: Injected[ToolsCommand],
+) -> None:
+    try:
+        command.list_tools(json_output=json_output)
+    except (MCPToolClientError, ServerError) as exc:
+        _fail(str(exc))
+
+
+_runtime_typer_signature(tools_list)
+
+
+@tools_app.command(
+    "call",
+    context_settings={
+        "allow_extra_args": True,
+        "allow_interspersed_args": False,
+        "ignore_unknown_options": True,
+    },
+)
+@resolver_context.inject(scope=Scope.REQUEST)
+def tools_call(  # noqa: PLR0913 - Typer command signatures mirror the CLI surface.
+    ctx: typer.Context,
+    name: Annotated[str, typer.Argument(help="MCP tool name to call.")],
+    *,
+    output: Annotated[
+        ToolOutput,
+        typer.Option("--output", help="Output format for the tool result.", case_sensitive=False),
+    ] = ToolOutput.text,
+    args_json: Annotated[
+        str | None,
+        typer.Option("--args-json", help="Full tool arguments object as JSON."),
+    ] = None,
+    args_json_file: Annotated[
+        Path | None,
+        typer.Option("--args-json-file", help="Path to a JSON object with tool arguments."),
+    ] = None,
+    command: Injected[ToolsCommand],
+) -> None:
+    try:
+        exit_code = command.call(
+            name=name,
+            raw_args=list(ctx.args),
+            output=output,
+            args_json=args_json,
+            args_json_file=args_json_file,
+        )
+    except (MCPToolClientError, ServerError, ToolArgumentsError, ValueError) as exc:
+        _fail(str(exc))
+
+    if exit_code:
+        raise typer.Exit(exit_code)
+
+
+_runtime_typer_signature(tools_call)
 
 
 def main() -> None:

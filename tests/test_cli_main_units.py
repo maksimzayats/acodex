@@ -3,13 +3,13 @@ from __future__ import annotations
 import json
 from io import StringIO
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar, cast
 
 import pytest
 from rich.console import Console
 from typer.testing import CliRunner
 
-from acodex.cli import __main__ as cli
+from acodex.cli import __main__ as cli, tools as cli_tools
 from acodex.cli.codex import CodexAppError
 from acodex.cli.server import ServerError, ServerState
 from acodex.config import AcodexConfig
@@ -46,7 +46,7 @@ class FakeDoctorWithFix:
                 {
                     "name": "server",
                     "status": "warn",
-                    "detail": "http://127.0.0.1:8765",
+                    "detail": "http://127.0.0.1:45218",
                     "fix": {
                         "summary": "Start the managed acodex HTTP server.",
                         "command": "acodex server start",
@@ -101,12 +101,37 @@ class FakeServerManager:
         return force
 
     def status(self) -> dict[str, Any]:
-        return {"running": True, "healthy": False, "base_url": "http://127.0.0.1:8765"}
+        return {"running": True, "healthy": False, "base_url": "http://127.0.0.1:45218"}
 
     def tail_logs(self, *, tail: int) -> tuple[Path, list[str]]:
         if tail == 1:
             return Path("server.log"), ["last"]
         return Path("server.log"), []
+
+
+class FakeToolsClient:
+    calls: ClassVar[list[tuple[str, dict[str, Any]]]] = []
+    urls: ClassVar[list[str]] = []
+    tools: ClassVar[list[dict[str, Any]]] = [
+        {
+            "name": "codex_app.list_threads",
+            "description": "List Codex threads.",
+        },
+    ]
+    result: ClassVar[dict[str, Any]] = {
+        "content": [{"type": "text", "text": "ok"}],
+        "isError": False,
+    }
+
+    def __init__(self, *, mcp_url: str) -> None:
+        self.urls.append(mcp_url)
+
+    def list_tools(self) -> list[dict[str, Any]]:
+        return self.tools
+
+    def call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        self.calls.append((name, arguments))
+        return self.result
 
 
 def test_help_and_config_commands(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -122,7 +147,7 @@ def test_help_and_config_commands(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
 
     show = runner.invoke(cli.app, ["config", "show"])
     assert show.exit_code == 0
-    assert json.loads(show.stdout)["server"]["port"] == 8765
+    assert json.loads(show.stdout)["server"]["port"] == 45218
 
 
 def test_config_show_invalid_exits(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -342,6 +367,264 @@ def test_server_commands(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Non
     assert "No server log file found" in no_logs.stdout
 
 
+def test_tools_list_and_call_commands(monkeypatch: pytest.MonkeyPatch) -> None:
+    class ToolsServerManager:
+        def status(self) -> dict[str, Any]:
+            return {
+                "running": True,
+                "healthy": True,
+                "mcp_url": "http://127.0.0.1:45218/mcp",
+            }
+
+    FakeToolsClient.calls = []
+    FakeToolsClient.urls = []
+    FakeToolsClient.tools = [
+        {
+            "name": "codex_app.list_threads",
+            "description": "List Codex threads.",
+        },
+    ]
+    FakeToolsClient.result = {
+        "content": [{"type": "text", "text": "called"}],
+        "isError": False,
+    }
+    monkeypatch.setattr(cli_tools, "ServerManager", ToolsServerManager)
+    monkeypatch.setattr(cli_tools, "MCPToolsClient", FakeToolsClient)
+
+    listed = runner.invoke(cli.app, ["tools", "list"])
+    assert listed.exit_code == 0
+    assert "Codex Tools" in listed.stdout
+    assert "codex_app.list_threads" in listed.stdout
+
+    listed_json = runner.invoke(cli.app, ["tools", "list", "--json"])
+    assert listed_json.exit_code == 0
+    assert json.loads(listed_json.stdout)["tools"][0]["name"] == "codex_app.list_threads"
+
+    called = runner.invoke(
+        cli.app,
+        [
+            "tools",
+            "call",
+            "codex_app.list_threads",
+            "--limit=1",
+            "--query",
+            "open issues",
+            "--includeArchived",
+        ],
+    )
+    assert called.exit_code == 0
+    assert called.stdout.strip() == "called"
+    assert FakeToolsClient.urls == [
+        "http://127.0.0.1:45218/mcp",
+        "http://127.0.0.1:45218/mcp",
+        "http://127.0.0.1:45218/mcp",
+    ]
+    assert FakeToolsClient.calls == [
+        (
+            "codex_app.list_threads",
+            {"limit": 1, "query": "open issues", "includeArchived": True},
+        ),
+    ]
+
+    called_json = runner.invoke(
+        cli.app,
+        ["tools", "call", "--output", "json", "codex_app.list_threads", "--limit", "2"],
+    )
+    assert called_json.exit_code == 0
+    assert json.loads(called_json.stdout)["content"][0]["text"] == "called"
+    assert FakeToolsClient.calls[-1] == ("codex_app.list_threads", {"limit": 2})
+
+    called_with_args_json = runner.invoke(
+        cli.app,
+        ["tools", "call", "--args-json", '{"payload":{"nested":true}}', "codex_app.echo"],
+    )
+    assert called_with_args_json.exit_code == 0
+    args_json_call = cast("tuple[str, dict[str, Any]]", FakeToolsClient.calls[-1])
+    assert args_json_call[0] == "codex_app.echo"
+    assert args_json_call[1]["payload"] == {"nested": True}
+
+    call_with_tool_output_arg = runner.invoke(
+        cli.app,
+        ["tools", "call", "codex_app.echo", "--output", "json"],
+    )
+    assert call_with_tool_output_arg.exit_code == 0
+    output_arg_call = cast("tuple[str, dict[str, Any]]", FakeToolsClient.calls[-1])
+    assert output_arg_call == ("codex_app.echo", {"output": "json"})
+
+
+def test_tools_call_tool_help(monkeypatch: pytest.MonkeyPatch) -> None:
+    class ToolsServerManager:
+        def status(self) -> dict[str, Any]:
+            return {
+                "running": True,
+                "healthy": True,
+                "mcp_url": "http://127.0.0.1:45218/mcp",
+            }
+
+    FakeToolsClient.calls = []
+    FakeToolsClient.tools = [
+        {
+            "name": "codex_app.list_threads",
+            "description": "List Codex threads.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {"limit": {"type": "number"}},
+            },
+        },
+    ]
+    monkeypatch.setattr(cli_tools, "ServerManager", ToolsServerManager)
+    monkeypatch.setattr(cli_tools, "MCPToolsClient", FakeToolsClient)
+
+    help_result = runner.invoke(cli.app, ["tools", "call", "codex_app.list_threads", "--help"])
+    assert help_result.exit_code == 0
+    assert "Tool Help" in help_result.stdout
+    assert "Input schema" in help_result.stdout
+    assert '"limit"' in help_result.stdout
+    assert "Default output payload shape" in help_result.stdout
+    assert '"schemaVersion"' in help_result.stdout
+    assert '"threads"' in help_result.stdout
+    assert "Raw MCP result (--output json)" in help_result.stdout
+    assert FakeToolsClient.calls == []
+
+    bare_help_result = runner.invoke(cli.app, ["tools", "call", "list_threads", "--help"])
+    assert bare_help_result.exit_code == 0
+    assert "codex_app.list_threads" in bare_help_result.stdout
+
+    missing_help_result = runner.invoke(cli.app, ["tools", "call", "missing", "--help"])
+    assert missing_help_result.exit_code == 1
+    assert "Tool not found: missing" in missing_help_result.stderr
+
+
+def test_tools_call_tool_help_handles_output_schema_and_missing_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class ToolsServerManager:
+        def status(self) -> dict[str, Any]:
+            return {
+                "running": True,
+                "healthy": True,
+                "mcp_url": "http://127.0.0.1:45218/mcp",
+            }
+
+    FakeToolsClient.calls = []
+    FakeToolsClient.tools = [
+        {
+            "name": "codex_app.echo",
+            "description": "Echo a value.",
+            "inputSchema": {"type": "object"},
+            "outputSchema": {"type": "object", "properties": {"value": {"type": "string"}}},
+        },
+        {
+            "name": "codex_app.unknown_output",
+            "description": "No output schema.",
+            "inputSchema": {"type": "object"},
+        },
+    ]
+    monkeypatch.setattr(cli_tools, "ServerManager", ToolsServerManager)
+    monkeypatch.setattr(cli_tools, "MCPToolsClient", FakeToolsClient)
+
+    schema_help = runner.invoke(cli.app, ["tools", "call", "codex_app.echo", "--help"])
+    assert schema_help.exit_code == 0
+    assert "Default output payload shape" in schema_help.stdout
+    assert '"value"' in schema_help.stdout
+
+    missing_schema_help = runner.invoke(
+        cli.app,
+        ["tools", "call", "codex_app.unknown_output", "--help"],
+    )
+    assert missing_schema_help.exit_code == 0
+    assert "This tool descriptor does not declare an output schema" in missing_schema_help.stdout
+
+
+def test_tools_command_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    class ErrorToolsClient(FakeToolsClient):
+        result: ClassVar[dict[str, Any]] = {
+            "content": [{"type": "text", "text": "tool failed"}],
+            "isError": True,
+        }
+
+    class ToolsServerManager:
+        def status(self) -> dict[str, Any]:
+            return {
+                "running": True,
+                "healthy": True,
+                "mcp_url": "http://127.0.0.1:45218/mcp",
+            }
+
+    monkeypatch.setattr(cli_tools, "ServerManager", ToolsServerManager)
+    monkeypatch.setattr(cli_tools, "MCPToolsClient", ErrorToolsClient)
+
+    failed_tool = runner.invoke(cli.app, ["tools", "call", "codex_app.fail"])
+    assert failed_tool.exit_code == 1
+    assert "tool failed" in failed_tool.stdout
+
+    invalid_args = runner.invoke(cli.app, ["tools", "call", "codex_app.echo", "limit=1"])
+    assert invalid_args.exit_code == 1
+    assert "must use --name value" in invalid_args.stderr
+
+
+def test_tools_list_empty_and_server_status_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    def server_manager_for_status(server_status: dict[str, Any]) -> type:
+        class StatusServerManager:
+            def status(self) -> dict[str, Any]:
+                return server_status
+
+        return StatusServerManager
+
+    class EmptyToolsClient(FakeToolsClient):
+        tools: ClassVar[list[dict[str, Any]]] = []
+
+    class EmptyToolsServerManager:
+        def status(self) -> dict[str, Any]:
+            return {
+                "running": True,
+                "healthy": True,
+                "mcp_url": "http://127.0.0.1:45218/mcp",
+            }
+
+    monkeypatch.setattr(cli_tools, "ServerManager", EmptyToolsServerManager)
+    monkeypatch.setattr(cli_tools, "MCPToolsClient", EmptyToolsClient)
+    empty = runner.invoke(cli.app, ["tools", "list"])
+    assert empty.exit_code == 0
+    assert "No tools are currently exposed" in empty.stdout
+
+    for server_status, message in [
+        ({"running": False}, "Managed server is not running"),
+        ({"running": True, "healthy": False}, "Managed server is not healthy"),
+        ({"running": True, "healthy": True}, "did not include an MCP URL"),
+    ]:
+        monkeypatch.setattr(cli_tools, "ServerManager", server_manager_for_status(server_status))
+        failed = runner.invoke(cli.app, ["tools", "list"])
+        assert failed.exit_code == 1
+        assert message in failed.stderr
+
+
+def test_tool_call_output_helpers() -> None:
+    output = StringIO()
+    presenter = cli_tools.ToolsPresenter(
+        console=Console(file=output, force_terminal=False, color_system=None, width=100),
+    )
+
+    presenter.tool_call_result({"value": 1}, output=cli_tools.ToolOutput.text)
+    presenter.tool_call_result(
+        {"content": [{"type": "image", "data": "raw"}]},
+        output=cli_tools.ToolOutput.text,
+    )
+    presenter.tool_call_result(
+        {"content": [{"type": "text", "text": "json"}], "isError": False},
+        output=cli_tools.ToolOutput.json,
+    )
+    presenter.tool_call_result({"content": []}, output=cli_tools.ToolOutput.text)
+    presenter.warning("warn", "details")
+
+    rendered = output.getvalue()
+    assert '{"value": 1}' in rendered
+    assert '{"type": "image", "data": "raw"}' in rendered
+    assert '"isError": false' in rendered
+    assert "details" in rendered
+    assert cli_tools.tool_output_shape({"name": None}) is None
+
+
 def test_server_status_optional_fields(monkeypatch: pytest.MonkeyPatch) -> None:
     output = capture_console(monkeypatch)
 
@@ -349,8 +632,8 @@ def test_server_status_optional_fields(monkeypatch: pytest.MonkeyPatch) -> None:
         {
             "running": True,
             "healthy": True,
-            "base_url": "http://127.0.0.1:8765",
-            "mcp_url": "http://127.0.0.1:8765/mcp",
+            "base_url": "http://127.0.0.1:45218",
+            "mcp_url": "http://127.0.0.1:45218/mcp",
             "pid": 123,
             "state_path": "run/server.json",
             "log_path": "logs/server.log",
@@ -361,7 +644,7 @@ def test_server_status_optional_fields(monkeypatch: pytest.MonkeyPatch) -> None:
 
     rendered = output.getvalue()
     assert "Healthy" in rendered
-    assert "http://127.0.0.1:8765/mcp" in rendered
+    assert "http://127.0.0.1:45218/mcp" in rendered
     assert "run/server.json" in rendered
     assert "logs/server.log" in rendered
     assert "detail line" in rendered

@@ -17,7 +17,7 @@ class CodexCDPSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="ACODEX_CODEX_APP_CDP_")
 
     host: str = "127.0.0.1"
-    port: int = 5633
+    port: int = 45217
     request_timeout: float = 10.0
 
     @property
