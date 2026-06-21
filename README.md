@@ -19,8 +19,6 @@ your Codex desktop build exposes.
   local automation clients.
 - **Practical CLI workflow.** Check configuration, relaunch Codex with CDP,
   manage the bridge server, and call tools from a terminal.
-- **Typed Python internals.** The codebase is typed, tested, and split into
-  clear CLI, HTTP, MCP, CDP, and dependency-injection layers.
 
 ## Quick Start
 
