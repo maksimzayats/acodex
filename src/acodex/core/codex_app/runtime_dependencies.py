@@ -72,7 +72,7 @@ def _find_codex_runtime_root() -> Path | None:
 
     candidates = sorted(
         (path.parent for path in cache_root.glob("*/runtime.json")),
-        key=lambda path: path.stat().st_mtime,
+        key=_runtime_sort_key,
         reverse=True,
     )
     for candidate in candidates:
@@ -80,3 +80,10 @@ def _find_codex_runtime_root() -> Path | None:
         if (dependencies / "node").exists() and (dependencies / "python").exists():
             return candidate
     return None
+
+
+def _runtime_sort_key(path: Path) -> tuple[int, str]:
+    runtime_json = path / "runtime.json"
+    runtime_payload = json.loads(runtime_json.read_text())
+    runtime = cast("dict[str, Any]", runtime_payload)
+    return runtime_json.stat().st_mtime_ns, str(runtime.get("bundleVersion", ""))
