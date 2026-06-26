@@ -113,6 +113,7 @@ class CodexCDPClient:
 
             self._ws = await websockets.connect(
                 websocket_url,
+                max_size=None,
                 open_timeout=self._settings.request_timeout,
             )
             self._recv_task = asyncio.create_task(self._recv_loop())
