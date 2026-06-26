@@ -345,7 +345,7 @@ async function listCodexDescriptors(dynamicTools, manager, hostId) {
 }
 
 function shouldProbeDynamicHandler(fn) {
-  const source = Function.prototype.toString.call(fn);
+  const source = safeFunctionSource(fn);
   return (
     source.includes("argumentsValue") ||
     source.includes("received invalid arguments") ||
@@ -354,12 +354,20 @@ function shouldProbeDynamicHandler(fn) {
 }
 
 function shouldProbeManagerHandler(fn) {
-  const source = Function.prototype.toString.call(fn);
+  const source = safeFunctionSource(fn);
   return (
     source.includes("takes no arguments") ||
     source.includes("read_thread_terminal") ||
     source.includes("load_workspace_dependencies")
   );
+}
+
+function safeFunctionSource(fn) {
+  try {
+    return Function.prototype.toString.call(fn);
+  } catch {
+    return "";
+  }
 }
 
 async function safeInvoke(fn, ...values) {
@@ -465,6 +473,10 @@ async function inferSourceThreadId(dynamicTools, scope, handlerMap, configuredSo
 
 async function buildHandlerMap(dynamicTools, manager, descriptors, scope, sourceThreadId) {
   const wantedNames = new Set(descriptors.map((descriptor) => descriptor.name));
+  return await buildHandlerMapForNames(dynamicTools, manager, wantedNames, scope, sourceThreadId);
+}
+
+async function buildHandlerMapForNames(dynamicTools, manager, wantedNames, scope, sourceThreadId) {
   const map = new Map();
   const probeArgs = { __codex_mcp_probe__: true };
 
@@ -477,6 +489,9 @@ async function buildHandlerMap(dynamicTools, manager, descriptors, scope, source
         map.set(name, { kind: "dynamic", fn });
       }
     }
+  }
+  if (hasAllHandlers(map, wantedNames)) {
+    return map;
   }
 
   for (const fn of Object.values(manager)) {
@@ -493,11 +508,18 @@ async function buildHandlerMap(dynamicTools, manager, descriptors, scope, source
   return map;
 }
 
+function hasAllHandlers(map, wantedNames) {
+  for (const name of wantedNames) {
+    if (!map.has(name)) return false;
+  }
+  return true;
+}
+
 async function findApiCall(vscodeApi) {
   if (!vscodeApi) return null;
   for (const fn of Object.values(vscodeApi)) {
     if (typeof fn !== "function") continue;
-    const source = Function.prototype.toString.call(fn);
+    const source = safeFunctionSource(fn);
     if (source.includes("vscode://codex/") || source.includes("sendMessageFromView")) {
       return fn;
     }
@@ -575,14 +597,29 @@ async function callRendererHandler(modules, config, toolName, args) {
     };
   }
 
-  let handlerMap = await buildHandlerMap(dynamicTools, manager, descriptors, scope, config.sourceThreadId);
-  const sourceThreadId = args?.threadId || await inferSourceThreadId(
+  const wantedNames = handlerProbeNames(toolName, descriptors);
+  let handlerMap = await buildHandlerMapForNames(
     dynamicTools,
+    manager,
+    wantedNames,
     scope,
-    handlerMap,
     config.sourceThreadId
   );
-  handlerMap = await buildHandlerMap(dynamicTools, manager, descriptors, scope, sourceThreadId);
+  const sourceThreadId = await resolveSourceThreadId(
+    toolName,
+    args,
+    config,
+    dynamicTools,
+    scope,
+    handlerMap
+  );
+  handlerMap = await buildHandlerMapForNames(
+    dynamicTools,
+    manager,
+    wantedNames,
+    scope,
+    sourceThreadId
+  );
   const handler = handlerMap.get(toolName);
   if (!handler) {
     return noHandler(toolName);
@@ -591,6 +628,21 @@ async function callRendererHandler(modules, config, toolName, args) {
     return await safeInvoke(handler.fn, args, sourceThreadId);
   }
   return await safeInvoke(handler.fn, makeCallContext(scope, args, sourceThreadId, appServerRegistry));
+}
+
+async function resolveSourceThreadId(toolName, args, config, dynamicTools, scope, handlerMap) {
+  if (args?.threadId || config.sourceThreadId) {
+    return args?.threadId || config.sourceThreadId;
+  }
+  if (toolName === "list_threads") {
+    return null;
+  }
+  return await inferSourceThreadId(dynamicTools, scope, handlerMap, null);
+}
+
+function handlerProbeNames(toolName, descriptors) {
+  const descriptorNames = new Set(descriptors.map((descriptor) => descriptor.name));
+  return new Set([toolName, "list_threads"].filter((name) => descriptorNames.has(name)));
 }
 
 async function runCodexAppMcpBridge(config) {

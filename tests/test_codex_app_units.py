@@ -336,6 +336,27 @@ def test_tool_name_normalization_and_renderer_expression() -> None:
     assert "runCodexAppMcpBridge" in expression
 
 
+def test_renderer_bridge_guards_function_source_probe_failures() -> None:
+    assert "function safeFunctionSource(fn)" in BRIDGE_SCRIPT
+    assert 'catch {\n    return "";' in BRIDGE_SCRIPT
+    assert BRIDGE_SCRIPT.count("Function.prototype.toString.call") == 1
+    assert "const source = safeFunctionSource(fn);" in BRIDGE_SCRIPT
+
+
+def test_renderer_bridge_probes_only_needed_handlers_for_tool_calls() -> None:
+    assert "function handlerProbeNames(toolName, descriptors)" in BRIDGE_SCRIPT
+    assert 'new Set([toolName, "list_threads"].filter' in BRIDGE_SCRIPT
+    assert "await buildHandlerMapForNames(\n    dynamicTools," in BRIDGE_SCRIPT
+
+
+def test_renderer_bridge_does_not_infer_source_thread_for_list_threads() -> None:
+    assert (
+        "function resolveSourceThreadId(toolName, args, config, dynamicTools, scope, handlerMap)"
+        in (BRIDGE_SCRIPT)
+    )
+    assert 'if (toolName === "list_threads") {\n    return null;' in BRIDGE_SCRIPT
+
+
 def test_runtime_dependency_helpers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert not runtime_dependencies.is_descriptor_without_handler({"success": True})
     assert not runtime_dependencies.is_descriptor_without_handler(
