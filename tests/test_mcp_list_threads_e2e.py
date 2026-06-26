@@ -15,6 +15,7 @@ import uvicorn
 
 from acodex.core.codex_app.cdp import CodexCDPSettings
 from acodex.http.app import app
+from acodex.http.mcp.constants import MCP_PROTOCOL_VERSION
 
 pytestmark = [
     pytest.mark.real_integration,
@@ -25,6 +26,16 @@ pytestmark = [
 
 _ENABLE_ENV = "ACODEX_RUN_REAL_INTEGRATION"
 _LOCAL_HOST = "127.0.0.1"
+_LIST_PROJECTS_TOOL = "codex_app.list_projects"
+_LIST_THREADS_TOOL = "codex_app.list_threads"
+_READ_THREAD_TOOL = "codex_app.read_thread"
+_WORKSPACE_DEPENDENCIES_TOOL = "codex_app.load_workspace_dependencies"
+_READ_ONLY_TOOL_NAMES = frozenset((
+    _LIST_PROJECTS_TOOL,
+    _LIST_THREADS_TOOL,
+    _READ_THREAD_TOOL,
+    _WORKSPACE_DEPENDENCIES_TOOL,
+))
 
 
 @pytest.fixture(scope="module")
@@ -64,53 +75,77 @@ def mcp_endpoint() -> Iterator[str]:
             pytest.fail("Uvicorn MCP test server did not stop")
 
 
-def test_mcp_tools_call_list_threads_returns_live_threads(mcp_endpoint: str) -> None:
+def test_mcp_tools_list_returns_live_read_only_tools(mcp_endpoint: str) -> None:
+    initialize_response = _post_jsonrpc(
+        mcp_endpoint,
+        _jsonrpc_request(
+            "initialize",
+            request_id="initialize",
+            params={
+                "protocolVersion": MCP_PROTOCOL_VERSION,
+                "capabilities": {},
+                "clientInfo": {"name": "acodex-e2e", "version": "0"},
+            },
+        ),
+    )
+    initialize_result = _response_result(initialize_response)
+    assert initialize_result["protocolVersion"] == MCP_PROTOCOL_VERSION
+
     tools_response = _post_jsonrpc(
         mcp_endpoint,
-        {
-            "jsonrpc": "2.0",
-            "id": "tools-list",
-            "method": "tools/list",
-        },
+        _jsonrpc_request("tools/list", request_id="tools-list"),
     )
-    assert "error" not in tools_response, tools_response
-    tools = tools_response["result"]["tools"]
-    assert any(tool.get("name") == "codex_app.list_threads" for tool in tools)
+    tools = _tools_from_response(tools_response)
+    tool_names = {tool["name"] for tool in tools if isinstance(tool.get("name"), str)}
+    assert tool_names >= _READ_ONLY_TOOL_NAMES
+    assert all(tool["inputSchema"]["type"] == "object" for tool in tools)
 
-    call_response = _post_jsonrpc(
+
+def test_mcp_tools_call_read_only_tools(mcp_endpoint: str) -> None:
+    list_threads_payload = _json_tool_payload(
         mcp_endpoint,
-        {
-            "jsonrpc": "2.0",
-            "id": "list-threads",
-            "method": "tools/call",
-            "params": {
-                "name": "codex_app.list_threads",
-                "arguments": {"limit": 1},
-            },
-        },
+        name=_LIST_THREADS_TOOL,
+        arguments={"limit": 1},
     )
+    assert list_threads_payload["schemaVersion"] == 1
+    assert list_threads_payload["query"] is None
+    assert isinstance(list_threads_payload["threads"], list)
+    assert list_threads_payload["threads"], "live Codex list_threads returned no threads"
 
-    assert "error" not in call_response, call_response
-    result = call_response["result"]
-    assert result["isError"] is False
-
-    text = "\n".join(
-        item["text"]
-        for item in result["content"]
-        if item.get("type") == "text" and isinstance(item.get("text"), str)
-    )
-    payload = json.loads(text)
-
-    assert payload["schemaVersion"] == 1
-    assert payload["query"] is None
-    assert isinstance(payload["threads"], list)
-    assert payload["threads"], "live Codex list_threads returned no threads"
-
-    thread = payload["threads"][0]
+    thread = list_threads_payload["threads"][0]
     assert isinstance(thread["id"], str)
     assert thread["id"]
     assert isinstance(thread["hostId"], str)
     assert isinstance(thread["title"], str)
+
+    list_projects_payload = _json_tool_payload(
+        mcp_endpoint,
+        name=_LIST_PROJECTS_TOOL,
+        arguments={},
+    )
+    assert list_projects_payload["schemaVersion"] == 1
+    assert isinstance(list_projects_payload["projects"], list)
+
+    workspace_text = _tool_text(
+        mcp_endpoint,
+        name=_WORKSPACE_DEPENDENCIES_TOOL,
+        arguments={},
+    )
+    assert "Workspace dependencies" in workspace_text
+
+    read_thread_payload = _json_tool_payload(
+        mcp_endpoint,
+        name=_READ_THREAD_TOOL,
+        arguments={
+            "threadId": thread["id"],
+            "hostId": thread["hostId"],
+            "turnLimit": 1,
+            "includeOutputs": False,
+        },
+    )
+    assert read_thread_payload["schemaVersion"] == 1
+    assert read_thread_payload["thread"]["id"] == thread["id"]
+    assert isinstance(read_thread_payload["turns"], list)
 
 
 def _skip_unless_real_integration_enabled() -> None:
@@ -150,6 +185,22 @@ def _get_json(url: str, *, timeout: float) -> Any:
         return json.loads(response.read().decode("utf-8"))
 
 
+def _jsonrpc_request(
+    method: str,
+    *,
+    request_id: str,
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "jsonrpc": "2.0",
+        "id": request_id,
+        "method": method,
+    }
+    if params is not None:
+        payload["params"] = params
+    return payload
+
+
 def _post_jsonrpc(url: str, payload: dict[str, Any]) -> dict[str, Any]:
     request = urllib.request.Request(  # noqa: S310
         url,
@@ -164,3 +215,68 @@ def _post_jsonrpc(url: str, payload: dict[str, Any]) -> dict[str, Any]:
         result = json.loads(response.read().decode("utf-8"))
     assert isinstance(result, dict)
     return result
+
+
+def _response_result(response: dict[str, Any]) -> dict[str, Any]:
+    assert "error" not in response, response
+    result = response["result"]
+    assert isinstance(result, dict)
+    return result
+
+
+def _tools_from_response(response: dict[str, Any]) -> list[dict[str, Any]]:
+    result = _response_result(response)
+    tools = result["tools"]
+    assert isinstance(tools, list)
+    assert all(isinstance(tool, dict) for tool in tools)
+    return tools
+
+
+def _tool_result(
+    url: str,
+    *,
+    name: str,
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    response = _post_jsonrpc(
+        url,
+        _jsonrpc_request(
+            "tools/call",
+            request_id=name,
+            params={
+                "name": name,
+                "arguments": arguments,
+            },
+        ),
+    )
+    result = _response_result(response)
+    assert result["isError"] is False, result
+    return result
+
+
+def _tool_text(url: str, *, name: str, arguments: dict[str, Any]) -> str:
+    result = _tool_result(url, name=name, arguments=arguments)
+    content = result["content"]
+    assert isinstance(content, list)
+    texts = [
+        item["text"]
+        for item in content
+        if (
+            isinstance(item, dict)
+            and item.get("type") == "text"
+            and isinstance(item.get("text"), str)
+        )
+    ]
+    assert texts, result
+    return "\n".join(texts)
+
+
+def _json_tool_payload(
+    url: str,
+    *,
+    name: str,
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    payload = json.loads(_tool_text(url, name=name, arguments=arguments))
+    assert isinstance(payload, dict)
+    return payload

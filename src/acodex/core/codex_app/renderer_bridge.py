@@ -121,20 +121,19 @@ function noHandler(toolName) {
         type: "inputText",
         text:
           `Codex exposed the ${toolName} descriptor, but this build did not export a callable renderer handler for it. ` +
-          `If the Electron MCP host implements call-mcp-tool in a newer build, this proxy will use it automatically.`,
+          `This proxy can call only live renderer handlers exported by the current Codex desktop build.`,
       },
     ],
   };
 }
 
 async function loadModules(config) {
-  const [dynamicTools, manager, appScope, vscodeApi] = await Promise.all([
+  const [dynamicTools, manager, appScope] = await Promise.all([
     import(config.assets.dynamicToolsUrl),
     import(config.assets.managerUrl),
     import(config.assets.appScopeUrl),
-    config.assets.vscodeApiUrl ? import(config.assets.vscodeApiUrl) : Promise.resolve(null),
   ]);
-  return { dynamicTools, manager, appScope, vscodeApi };
+  return { dynamicTools, manager, appScope };
 }
 
 function findScopeChain() {
@@ -345,7 +344,7 @@ async function listCodexDescriptors(dynamicTools, manager, hostId) {
 }
 
 function shouldProbeDynamicHandler(fn) {
-  const source = Function.prototype.toString.call(fn);
+  const source = safeFunctionSource(fn);
   return (
     source.includes("argumentsValue") ||
     source.includes("received invalid arguments") ||
@@ -354,12 +353,20 @@ function shouldProbeDynamicHandler(fn) {
 }
 
 function shouldProbeManagerHandler(fn) {
-  const source = Function.prototype.toString.call(fn);
+  const source = safeFunctionSource(fn);
   return (
     source.includes("takes no arguments") ||
     source.includes("read_thread_terminal") ||
     source.includes("load_workspace_dependencies")
   );
+}
+
+function safeFunctionSource(fn) {
+  try {
+    return Function.prototype.toString.call(fn);
+  } catch {
+    return "";
+  }
 }
 
 async function safeInvoke(fn, ...values) {
@@ -465,6 +472,10 @@ async function inferSourceThreadId(dynamicTools, scope, handlerMap, configuredSo
 
 async function buildHandlerMap(dynamicTools, manager, descriptors, scope, sourceThreadId) {
   const wantedNames = new Set(descriptors.map((descriptor) => descriptor.name));
+  return await buildHandlerMapForNames(dynamicTools, manager, wantedNames, scope, sourceThreadId);
+}
+
+async function buildHandlerMapForNames(dynamicTools, manager, wantedNames, scope, sourceThreadId) {
   const map = new Map();
   const probeArgs = { __codex_mcp_probe__: true };
 
@@ -477,6 +488,9 @@ async function buildHandlerMap(dynamicTools, manager, descriptors, scope, source
         map.set(name, { kind: "dynamic", fn });
       }
     }
+  }
+  if (hasAllHandlers(map, wantedNames)) {
+    return map;
   }
 
   for (const fn of Object.values(manager)) {
@@ -493,73 +507,11 @@ async function buildHandlerMap(dynamicTools, manager, descriptors, scope, source
   return map;
 }
 
-async function findApiCall(vscodeApi) {
-  if (!vscodeApi) return null;
-  for (const fn of Object.values(vscodeApi)) {
-    if (typeof fn !== "function") continue;
-    const source = Function.prototype.toString.call(fn);
-    if (source.includes("vscode://codex/") || source.includes("sendMessageFromView")) {
-      return fn;
-    }
+function hasAllHandlers(map, wantedNames) {
+  for (const name of wantedNames) {
+    if (!map.has(name)) return false;
   }
-  for (const fn of Object.values(vscodeApi)) {
-    if (typeof fn !== "function") continue;
-    try {
-      const result = await fn("extension-info");
-      if (result && typeof result === "object") return fn;
-    } catch {
-      // Not the bridge function.
-    }
-  }
-  return null;
-}
-
-async function tryInternalMcpCall(vscodeApi, config, toolName, args, sourceThreadId) {
-  // Current desktop builds can leave this internal MCP call pending; use the live renderer handler.
-  if (toolName === "list_threads") {
-    return null;
-  }
-  const apiCall = await findApiCall(vscodeApi);
-  if (!apiCall) return null;
-  try {
-    const status = await apiCall("list-mcp-server-status", {
-      params: {
-        cursor: null,
-        detail: "toolsAndAuthOnly",
-        hostId: config.hostId,
-        limit: 100,
-      },
-    });
-    const servers = Array.isArray(status?.data)
-      ? status.data
-      : Array.isArray(status?.servers)
-        ? status.servers
-        : [];
-    const server = servers.find((candidate) => {
-      const name = candidate?.name || candidate?.serverName || candidate?.id;
-      return name === "codex_apps";
-    });
-    if (!server) return null;
-    const tools = server.tools || server.toolNames || [];
-    const toolNames = tools.map((tool) => (typeof tool === "string" ? tool : tool?.name)).filter(Boolean);
-    const internalToolName = toolNames.includes(toolName)
-      ? toolName
-      : toolNames.includes(`_${toolName}`)
-        ? `_${toolName}`
-        : null;
-    if (!internalToolName) return null;
-    return await apiCall("call-mcp-tool", {
-      params: {
-        arguments: args,
-        hostId: config.hostId,
-        server: "codex_apps",
-        threadId: sourceThreadId,
-        tool: internalToolName,
-      },
-    });
-  } catch {
-    return null;
-  }
+  return true;
 }
 
 async function callRendererHandler(modules, config, toolName, args) {
@@ -575,14 +527,32 @@ async function callRendererHandler(modules, config, toolName, args) {
     };
   }
 
-  let handlerMap = await buildHandlerMap(dynamicTools, manager, descriptors, scope, config.sourceThreadId);
-  const sourceThreadId = args?.threadId || await inferSourceThreadId(
+  const wantedNames = handlerProbeNames(toolName, descriptors);
+  const initialSourceThreadId = config.sourceThreadId || null;
+  let handlerMap = await buildHandlerMapForNames(
+    dynamicTools,
+    manager,
+    wantedNames,
+    scope,
+    initialSourceThreadId
+  );
+  const sourceThreadId = await resolveSourceThreadId(
+    toolName,
+    args,
+    config,
     dynamicTools,
     scope,
-    handlerMap,
-    config.sourceThreadId
+    handlerMap
   );
-  handlerMap = await buildHandlerMap(dynamicTools, manager, descriptors, scope, sourceThreadId);
+  if (sourceThreadId !== initialSourceThreadId) {
+    handlerMap = await buildHandlerMapForNames(
+      dynamicTools,
+      manager,
+      wantedNames,
+      scope,
+      sourceThreadId
+    );
+  }
   const handler = handlerMap.get(toolName);
   if (!handler) {
     return noHandler(toolName);
@@ -591,6 +561,21 @@ async function callRendererHandler(modules, config, toolName, args) {
     return await safeInvoke(handler.fn, args, sourceThreadId);
   }
   return await safeInvoke(handler.fn, makeCallContext(scope, args, sourceThreadId, appServerRegistry));
+}
+
+async function resolveSourceThreadId(toolName, args, config, dynamicTools, scope, handlerMap) {
+  if (args?.threadId || config.sourceThreadId) {
+    return args?.threadId || config.sourceThreadId;
+  }
+  if (toolName === "list_threads") {
+    return null;
+  }
+  return await inferSourceThreadId(dynamicTools, scope, handlerMap, null);
+}
+
+function handlerProbeNames(toolName, descriptors) {
+  const descriptorNames = new Set(descriptors.map((descriptor) => descriptor.name));
+  return new Set([toolName, "list_threads"].filter((name) => descriptorNames.has(name)));
 }
 
 async function runCodexAppMcpBridge(config) {
@@ -614,17 +599,6 @@ async function runCodexAppMcpBridge(config) {
 
     const toolName = config.toolName;
     const args = config.arguments || {};
-    const internalResult = await tryInternalMcpCall(
-      modules.vscodeApi,
-      config,
-      toolName,
-      args,
-      config.sourceThreadId || args.threadId || null
-    );
-    if (internalResult != null) {
-      return asResult({ result: internalResult });
-    }
-
     const result = await callRendererHandler(modules, config, toolName, args);
     return asResult({ result });
   } catch (error) {

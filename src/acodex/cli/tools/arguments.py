@@ -11,6 +11,7 @@ from acodex.cli.tools.models import ToolArgumentsError
 ARGUMENT_KEY_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*$")
 HELP_TOKEN = "--help"  # noqa: S105 - CLI help flag, not a password.
 OPTION_PREFIX = "--"
+PROPERTIES_KEY = "properties"
 
 
 @dataclass(frozen=True, slots=True)
@@ -177,3 +178,74 @@ def parse_tool_arguments(
     args_json_file: Path | None = None,
 ) -> dict[str, Any]:
     return ToolArgumentsParser().parse(tokens, args_json=args_json, args_json_file=args_json_file)
+
+
+@dataclass(frozen=True, slots=True)
+class SchemaArgumentNormalizer:
+    """Map CLI-friendly argument names onto JSON schema property names."""
+
+    def normalize(
+        self,
+        arguments: dict[str, Any],
+        *,
+        input_schema: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        """Return arguments with schema-backed camelCase aliases applied."""
+        properties = self._schema_properties(input_schema)
+        if not properties:
+            return arguments
+        aliases = self._property_aliases(properties)
+        normalized_arguments: dict[str, Any] = {}
+        for argument_key, argument_value in arguments.items():
+            normalized_key = self._normalized_key(
+                argument_key=argument_key,
+                properties=properties,
+                aliases=aliases,
+            )
+            if normalized_key in normalized_arguments:
+                raise ToolArgumentsError(f"Duplicate tool argument: {normalized_key}")
+            normalized_arguments[normalized_key] = argument_value
+        return normalized_arguments
+
+    def _schema_properties(self, input_schema: dict[str, Any] | None) -> dict[str, Any]:
+        if input_schema is None:
+            return {}
+        properties = input_schema.get(PROPERTIES_KEY)
+        if not isinstance(properties, dict):
+            return {}
+        return cast("dict[str, Any]", properties)
+
+    def _property_aliases(self, properties: dict[str, Any]) -> dict[str, str]:
+        aliases: dict[str, str] = {}
+        duplicate_signatures: set[str] = set()
+        for property_name in properties:
+            signature = self._argument_signature(property_name)
+            if signature in aliases:
+                duplicate_signatures.add(signature)
+            else:
+                aliases[signature] = property_name
+        for duplicate_signature in duplicate_signatures:
+            aliases.pop(duplicate_signature)
+        return aliases
+
+    def _normalized_key(
+        self,
+        *,
+        argument_key: str,
+        properties: dict[str, Any],
+        aliases: dict[str, str],
+    ) -> str:
+        if argument_key in properties:
+            return argument_key
+        return aliases.get(self._argument_signature(argument_key), argument_key)
+
+    def _argument_signature(self, argument_key: str) -> str:
+        return argument_key.replace("_", "").replace("-", "").lower()
+
+
+def normalize_tool_arguments(
+    arguments: dict[str, Any],
+    *,
+    input_schema: dict[str, Any] | None,
+) -> dict[str, Any]:
+    return SchemaArgumentNormalizer().normalize(arguments, input_schema=input_schema)

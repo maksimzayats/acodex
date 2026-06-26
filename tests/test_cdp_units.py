@@ -256,9 +256,15 @@ def test_ensure_connected_uses_existing_or_connects(monkeypatch: pytest.MonkeyPa
 
         connected = IterableWebSocket([])
 
-        async def connect(url: str, *, open_timeout: float) -> IterableWebSocket:
+        async def connect(
+            url: str,
+            *,
+            max_size: int | None,
+            open_timeout: float,
+        ) -> IterableWebSocket:
             await asyncio.sleep(0)
             assert url == "ws://target"
+            assert max_size is None
             assert open_timeout == pytest.approx(0.1)
             return connected
 

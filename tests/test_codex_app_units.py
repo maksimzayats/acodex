@@ -35,10 +35,12 @@ class FakeCDP:
         tree: dict[str, Any] | None = None,
         contents: dict[str, str | BaseException] | None = None,
         evaluate_result: Any = None,
+        evaluate_results: list[Any] | None = None,
     ) -> None:
         self.tree = tree or {}
         self.contents = contents or {}
         self.evaluate_result = evaluate_result
+        self.evaluate_results = evaluate_results or []
         self.evaluations: list[tuple[str, bool]] = []
 
     async def resource_tree(self) -> dict[str, Any]:
@@ -52,6 +54,8 @@ class FakeCDP:
 
     async def evaluate(self, expression: str, *, await_promise: bool = True) -> Any:
         self.evaluations.append((expression, await_promise))
+        if self.evaluate_results:
+            return self.evaluate_results.pop(0)
         return self.evaluate_result
 
 
@@ -209,7 +213,13 @@ def test_bridge_lists_and_calls_tools(monkeypatch: pytest.MonkeyPatch) -> None:
         evaluate_result=json.dumps(
             {
                 "ok": True,
-                "tools": [{"name": "codex_app.echo"}, "bad"],
+                "tools": [
+                    {
+                        "name": "codex_app.echo",
+                        "inputSchema": {"oneOf": [{"type": "object"}]},
+                    },
+                    "bad",
+                ],
                 "result": {"contentItems": [{"type": "inputText", "text": "ok"}]},
             },
         ),
@@ -232,7 +242,15 @@ def test_bridge_lists_and_calls_tools(monkeypatch: pytest.MonkeyPatch) -> None:
         _settings=CodexAppBridgeSettings(host_id="host", source_thread_id="thread"),
     )
 
-    assert run(app_bridge.list_tools()) == [{"name": "codex_app.echo"}]
+    assert run(app_bridge.list_tools()) == [
+        {
+            "name": "codex_app.echo",
+            "inputSchema": {
+                "oneOf": [{"type": "object"}],
+                "type": "object",
+            },
+        },
+    ]
     assert run(app_bridge.call_tool("codex_app__echo", {"value": 1})) == {
         "contentItems": [{"type": "inputText", "text": "ok"}],
     }
@@ -241,6 +259,46 @@ def test_bridge_lists_and_calls_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     assert await_promise is True
     assert '"toolName": "echo"' in expression
     assert '"sourceThreadId": "thread"' in expression
+
+
+def test_bridge_rediscovers_assets_after_stale_import_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cdp = FakeCDP(
+        evaluate_results=[
+            {
+                "ok": False,
+                "error": (
+                    "TypeError: Failed to fetch dynamically imported module: app://-/assets/old.js"
+                ),
+            },
+            {"ok": True, "tools": [{"name": "codex_app.echo"}]},
+        ],
+    )
+    discovered_assets = [
+        CodexRendererAssets("scope-1", "dynamic-1", "manager-1", None),
+        CodexRendererAssets("scope-2", "dynamic-2", "manager-2", "vscode-2"),
+    ]
+
+    async def discover(_cdp: CodexCDPClient) -> CodexRendererAssets:
+        await asyncio.sleep(0)
+        return discovered_assets.pop(0)
+
+    monkeypatch.setattr(bridge, "discover_renderer_assets", discover)
+    app_bridge = CodexAppBridge(
+        _cdp=cast("CodexCDPClient", cdp),
+        _settings=CodexAppBridgeSettings(),
+    )
+
+    assert run(app_bridge.list_tools()) == [
+        {
+            "name": "codex_app.echo",
+            "inputSchema": {"type": "object", "properties": {}},
+        },
+    ]
+    assert len(cdp.evaluations) == 2
+    assert '"dynamicToolsUrl": "dynamic-1"' in cdp.evaluations[0][0]
+    assert '"dynamicToolsUrl": "dynamic-2"' in cdp.evaluations[1][0]
 
 
 def test_bridge_handles_invalid_results_and_workspace_fallback(
@@ -295,6 +353,54 @@ def test_tool_name_normalization_and_renderer_expression() -> None:
     assert '"action": "listTools"' in expression
     assert "descriptorFactoryArgs" in BRIDGE_SCRIPT
     assert "runCodexAppMcpBridge" in expression
+
+
+def test_mcp_input_schema_normalization() -> None:
+    assert bridge.normalize_mcp_input_schema(None) == {
+        "type": "object",
+        "properties": {},
+    }
+    assert bridge.normalize_mcp_input_schema({"type": "object", "properties": {"x": {}}}) == {
+        "type": "object",
+        "properties": {"x": {}},
+    }
+
+
+def test_renderer_bridge_guards_function_source_probe_failures() -> None:
+    assert "function safeFunctionSource(fn)" in BRIDGE_SCRIPT
+    assert 'catch {\n    return "";' in BRIDGE_SCRIPT
+    assert BRIDGE_SCRIPT.count("Function.prototype.toString.call") == 1
+    assert "const source = safeFunctionSource(fn);" in BRIDGE_SCRIPT
+
+
+def test_renderer_bridge_probes_only_needed_handlers_for_tool_calls() -> None:
+    assert "function handlerProbeNames(toolName, descriptors)" in BRIDGE_SCRIPT
+    assert 'new Set([toolName, "list_threads"].filter' in BRIDGE_SCRIPT
+    assert "await buildHandlerMapForNames(\n    dynamicTools," in BRIDGE_SCRIPT
+
+
+def test_renderer_bridge_skips_duplicate_source_thread_probe() -> None:
+    assert "const initialSourceThreadId = config.sourceThreadId || null;" in BRIDGE_SCRIPT
+    assert "if (sourceThreadId !== initialSourceThreadId) {" in BRIDGE_SCRIPT
+    assert "sourceThreadId\n    );\n  }" in BRIDGE_SCRIPT
+
+
+def test_renderer_bridge_does_not_infer_source_thread_for_list_threads() -> None:
+    assert (
+        "function resolveSourceThreadId(toolName, args, config, dynamicTools, scope, handlerMap)"
+        in (BRIDGE_SCRIPT)
+    )
+    assert 'if (toolName === "list_threads") {\n    return null;' in BRIDGE_SCRIPT
+
+
+def test_renderer_bridge_uses_live_handlers_instead_of_internal_mcp_calls() -> None:
+    assert "list-mcp-server-status" not in BRIDGE_SCRIPT
+    assert '"call-mcp-tool"' not in BRIDGE_SCRIPT
+    assert "vscodeApiUrl ? import" not in BRIDGE_SCRIPT
+    assert "This proxy can call only live renderer handlers" in BRIDGE_SCRIPT
+    assert "const result = await callRendererHandler(modules, config, toolName, args);" in (
+        BRIDGE_SCRIPT
+    )
 
 
 def test_runtime_dependency_helpers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

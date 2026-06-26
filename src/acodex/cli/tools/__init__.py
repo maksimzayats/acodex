@@ -5,7 +5,9 @@ from acodex.cli.tools.arguments import (
     JSONArgumentSource,
     OptionTokenParser,
     OptionTokenStream,
+    SchemaArgumentNormalizer,
     ToolArgumentsParser,
+    normalize_tool_arguments,
     parse_tool_arguments,
 )
 from acodex.cli.tools.client_provider import (
@@ -33,6 +35,7 @@ __all__ = (
     "ManagedMCPToolsClientProvider",
     "OptionTokenParser",
     "OptionTokenStream",
+    "SchemaArgumentNormalizer",
     "ServerManager",
     "ToolArgumentsError",
     "ToolArgumentsParser",
@@ -42,6 +45,7 @@ __all__ = (
     "find_tool_descriptor",
     "json_syntax",
     "mcp_tool_result_shape",
+    "normalize_tool_arguments",
     "panel",
     "parse_tool_arguments",
     "tool_output_note",
