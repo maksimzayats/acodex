@@ -15,6 +15,9 @@ from acodex.core.codex_app.runtime_dependencies import (
     load_workspace_dependencies_fallback,
 )
 
+APP_RESOURCE_URL_PREFIX = "app://-"
+DYNAMIC_IMPORT_FAILURE = "Failed to fetch dynamically imported module"
+
 
 class CodexAppBridgeSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="ACODEX_CODEX_APP_BRIDGE_")
@@ -80,6 +83,15 @@ class CodexAppBridge:
         return tool_payload
 
     async def _evaluate(self, payload: dict[str, Any]) -> dict[str, Any]:
+        result_payload = await self._evaluate_once(payload)
+        if self._is_stale_asset_failure(result_payload):
+            self._assets = None
+            result_payload = await self._evaluate_once(payload)
+        if not result_payload.get("ok"):
+            raise CodexAppBridgeError(str(result_payload.get("error") or "Codex bridge failed"))
+        return result_payload
+
+    async def _evaluate_once(self, payload: dict[str, Any]) -> dict[str, Any]:
         assets = await self._get_assets()
         bridge_payload = {
             **payload,
@@ -92,10 +104,17 @@ class CodexAppBridge:
             result = json.loads(result)
         if not isinstance(result, dict):
             raise CodexAppBridgeError(f"Unexpected Codex bridge result: {result!r}")
-        result_payload = cast("dict[str, Any]", result)
-        if not result_payload.get("ok"):
-            raise CodexAppBridgeError(str(result_payload.get("error") or "Codex bridge failed"))
-        return result_payload
+        return cast("dict[str, Any]", result)
+
+    def _is_stale_asset_failure(self, result_payload: dict[str, Any]) -> bool:
+        if result_payload.get("ok"):
+            return False
+        error_message = result_payload.get("error")
+        return (
+            isinstance(error_message, str)
+            and DYNAMIC_IMPORT_FAILURE in error_message
+            and APP_RESOURCE_URL_PREFIX in error_message
+        )
 
     async def _get_assets(self) -> CodexRendererAssets:
         if self._assets is None:
