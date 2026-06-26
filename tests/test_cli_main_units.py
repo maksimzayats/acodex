@@ -494,6 +494,59 @@ def test_tools_list_and_call_commands(monkeypatch: pytest.MonkeyPatch) -> None:
     output_arg_call = cast("Any", FakeToolsClient.calls[-1])
     assert output_arg_call == ("codex_app.echo", {"output": "json"})
 
+    FakeToolsClient.tools = [
+        {
+            "name": "codex_app.send_message_to_thread",
+            "description": "Send a message.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "threadId": {"type": "string"},
+                    "prompt": {"type": "string"},
+                },
+            },
+        },
+    ]
+    assert (
+        runner.invoke(
+            cli.app,
+            [
+                "tools",
+                "call",
+                "codex_app.send_message_to_thread",
+                "--thread_id",
+                "thread-1",
+                "--prompt",
+                "hi",
+            ],
+        ).exit_code
+        == 0
+    )
+    assert cast("Any", FakeToolsClient.calls[-1]) == (
+        "codex_app.send_message_to_thread",
+        {"threadId": "thread-1", "prompt": "hi"},
+    )
+
+    FakeToolsClient.tools = []
+    assert (
+        runner.invoke(
+            cli.app,
+            ["tools", "call", "codex_app.echo", "--some_arg", "1"],
+        ).exit_code
+        == 0
+    )
+    assert cast("Any", FakeToolsClient.calls[-1]) == ("codex_app.echo", {"some_arg": 1})
+
+    FakeToolsClient.tools = [{"name": "codex_app.echo", "description": "Echo."}]
+    assert (
+        runner.invoke(
+            cli.app,
+            ["tools", "call", "codex_app.echo", "--some_arg", "2"],
+        ).exit_code
+        == 0
+    )
+    assert cast("Any", FakeToolsClient.calls[-1]) == ("codex_app.echo", {"some_arg": 2})
+
 
 def test_tools_call_tool_help(monkeypatch: pytest.MonkeyPatch) -> None:
     class ToolsServerManager:

@@ -515,75 +515,6 @@ function hasAllHandlers(map, wantedNames) {
   return true;
 }
 
-async function findApiCall(vscodeApi) {
-  if (!vscodeApi) return null;
-  for (const fn of Object.values(vscodeApi)) {
-    if (typeof fn !== "function") continue;
-    const source = safeFunctionSource(fn);
-    if (source.includes("vscode://codex/") || source.includes("sendMessageFromView")) {
-      return fn;
-    }
-  }
-  for (const fn of Object.values(vscodeApi)) {
-    if (typeof fn !== "function") continue;
-    try {
-      const result = await fn("extension-info");
-      if (result && typeof result === "object") return fn;
-    } catch {
-      // Not the bridge function.
-    }
-  }
-  return null;
-}
-
-async function tryInternalMcpCall(vscodeApi, config, toolName, args, sourceThreadId) {
-  // Current desktop builds can leave this internal MCP call pending; use the live renderer handler.
-  if (toolName === "list_threads") {
-    return null;
-  }
-  const apiCall = await findApiCall(vscodeApi);
-  if (!apiCall) return null;
-  try {
-    const status = await apiCall("list-mcp-server-status", {
-      params: {
-        cursor: null,
-        detail: "toolsAndAuthOnly",
-        hostId: config.hostId,
-        limit: 100,
-      },
-    });
-    const servers = Array.isArray(status?.data)
-      ? status.data
-      : Array.isArray(status?.servers)
-        ? status.servers
-        : [];
-    const server = servers.find((candidate) => {
-      const name = candidate?.name || candidate?.serverName || candidate?.id;
-      return name === "codex_apps";
-    });
-    if (!server) return null;
-    const tools = server.tools || server.toolNames || [];
-    const toolNames = tools.map((tool) => (typeof tool === "string" ? tool : tool?.name)).filter(Boolean);
-    const internalToolName = toolNames.includes(toolName)
-      ? toolName
-      : toolNames.includes(`_${toolName}`)
-        ? `_${toolName}`
-        : null;
-    if (!internalToolName) return null;
-    return await apiCall("call-mcp-tool", {
-      params: {
-        arguments: args,
-        hostId: config.hostId,
-        server: "codex_apps",
-        threadId: sourceThreadId,
-        tool: internalToolName,
-      },
-    });
-  } catch {
-    return null;
-  }
-}
-
 async function callRendererHandler(modules, config, toolName, args) {
   const { dynamicTools, manager, appScope } = modules;
   const scope = makeScope(appScope);
@@ -666,17 +597,6 @@ async function runCodexAppMcpBridge(config) {
 
     const toolName = config.toolName;
     const args = config.arguments || {};
-    const internalResult = await tryInternalMcpCall(
-      modules.vscodeApi,
-      config,
-      toolName,
-      args,
-      config.sourceThreadId || args.threadId || null
-    );
-    if (internalResult != null) {
-      return asResult({ result: internalResult });
-    }
-
     const result = await callRendererHandler(modules, config, toolName, args);
     return asResult({ result });
   } catch (error) {

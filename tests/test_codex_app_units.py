@@ -357,6 +357,14 @@ def test_renderer_bridge_does_not_infer_source_thread_for_list_threads() -> None
     assert 'if (toolName === "list_threads") {\n    return null;' in BRIDGE_SCRIPT
 
 
+def test_renderer_bridge_uses_live_handlers_instead_of_internal_mcp_calls() -> None:
+    assert "list-mcp-server-status" not in BRIDGE_SCRIPT
+    assert '"call-mcp-tool"' not in BRIDGE_SCRIPT
+    assert "const result = await callRendererHandler(modules, config, toolName, args);" in (
+        BRIDGE_SCRIPT
+    )
+
+
 def test_runtime_dependency_helpers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert not runtime_dependencies.is_descriptor_without_handler({"success": True})
     assert not runtime_dependencies.is_descriptor_without_handler(

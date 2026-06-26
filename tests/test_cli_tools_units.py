@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from acodex.cli.tools import ToolArgumentsError, parse_tool_arguments
+from acodex.cli.tools import ToolArgumentsError, normalize_tool_arguments, parse_tool_arguments
 
 
 def test_parse_tool_arguments_from_long_options() -> None:
@@ -72,3 +72,65 @@ def test_parse_tool_arguments_reports_invalid_input(
 def test_parse_tool_arguments_reports_unreadable_file(tmp_path: Path) -> None:
     with pytest.raises(ToolArgumentsError, match="Could not read tool arguments"):
         parse_tool_arguments([], args_json_file=tmp_path)
+
+
+def test_normalize_tool_arguments_maps_cli_aliases_to_schema_properties() -> None:
+    assert normalize_tool_arguments(
+        {
+            "thread_id": "thread-1",
+            "host-id": "local",
+            "prompt": "hi",
+        },
+        input_schema={
+            "type": "object",
+            "properties": {
+                "threadId": {"type": "string"},
+                "hostId": {"type": "string"},
+                "prompt": {"type": "string"},
+            },
+        },
+    ) == {
+        "threadId": "thread-1",
+        "hostId": "local",
+        "prompt": "hi",
+    }
+
+
+def test_normalize_tool_arguments_without_schema_properties_returns_original() -> None:
+    arguments = {"thread_id": "thread-1"}
+
+    assert normalize_tool_arguments(arguments, input_schema=None) is arguments
+    assert normalize_tool_arguments(arguments, input_schema={"properties": []}) is arguments
+
+
+def test_normalize_tool_arguments_preserves_unknown_and_ambiguous_keys() -> None:
+    assert normalize_tool_arguments(
+        {
+            "thread_id": "thread-1",
+            "unknown_value": True,
+        },
+        input_schema={
+            "properties": {
+                "threadId": {"type": "string"},
+                "threadid": {"type": "string"},
+            },
+        },
+    ) == {
+        "thread_id": "thread-1",
+        "unknown_value": True,
+    }
+
+
+def test_normalize_tool_arguments_reports_duplicate_schema_property() -> None:
+    with pytest.raises(ToolArgumentsError, match="Duplicate tool argument: threadId"):
+        normalize_tool_arguments(
+            {
+                "threadId": "thread-1",
+                "thread_id": "thread-2",
+            },
+            input_schema={
+                "properties": {
+                    "threadId": {"type": "string"},
+                },
+            },
+        )
