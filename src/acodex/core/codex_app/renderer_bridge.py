@@ -528,12 +528,13 @@ async function callRendererHandler(modules, config, toolName, args) {
   }
 
   const wantedNames = handlerProbeNames(toolName, descriptors);
+  const initialSourceThreadId = config.sourceThreadId || null;
   let handlerMap = await buildHandlerMapForNames(
     dynamicTools,
     manager,
     wantedNames,
     scope,
-    config.sourceThreadId
+    initialSourceThreadId
   );
   const sourceThreadId = await resolveSourceThreadId(
     toolName,
@@ -543,13 +544,15 @@ async function callRendererHandler(modules, config, toolName, args) {
     scope,
     handlerMap
   );
-  handlerMap = await buildHandlerMapForNames(
-    dynamicTools,
-    manager,
-    wantedNames,
-    scope,
-    sourceThreadId
-  );
+  if (sourceThreadId !== initialSourceThreadId) {
+    handlerMap = await buildHandlerMapForNames(
+      dynamicTools,
+      manager,
+      wantedNames,
+      scope,
+      sourceThreadId
+    );
+  }
   const handler = handlerMap.get(toolName);
   if (!handler) {
     return noHandler(toolName);

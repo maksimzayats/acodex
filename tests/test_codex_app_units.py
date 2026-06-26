@@ -349,6 +349,12 @@ def test_renderer_bridge_probes_only_needed_handlers_for_tool_calls() -> None:
     assert "await buildHandlerMapForNames(\n    dynamicTools," in BRIDGE_SCRIPT
 
 
+def test_renderer_bridge_skips_duplicate_source_thread_probe() -> None:
+    assert "const initialSourceThreadId = config.sourceThreadId || null;" in BRIDGE_SCRIPT
+    assert "if (sourceThreadId !== initialSourceThreadId) {" in BRIDGE_SCRIPT
+    assert "sourceThreadId\n    );\n  }" in BRIDGE_SCRIPT
+
+
 def test_renderer_bridge_does_not_infer_source_thread_for_list_threads() -> None:
     assert (
         "function resolveSourceThreadId(toolName, args, config, dynamicTools, scope, handlerMap)"
