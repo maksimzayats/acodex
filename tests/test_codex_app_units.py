@@ -360,6 +360,8 @@ def test_renderer_bridge_does_not_infer_source_thread_for_list_threads() -> None
 def test_renderer_bridge_uses_live_handlers_instead_of_internal_mcp_calls() -> None:
     assert "list-mcp-server-status" not in BRIDGE_SCRIPT
     assert '"call-mcp-tool"' not in BRIDGE_SCRIPT
+    assert "vscodeApiUrl ? import" not in BRIDGE_SCRIPT
+    assert "This proxy can call only live renderer handlers" in BRIDGE_SCRIPT
     assert "const result = await callRendererHandler(modules, config, toolName, args);" in (
         BRIDGE_SCRIPT
     )

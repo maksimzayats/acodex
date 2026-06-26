@@ -121,20 +121,19 @@ function noHandler(toolName) {
         type: "inputText",
         text:
           `Codex exposed the ${toolName} descriptor, but this build did not export a callable renderer handler for it. ` +
-          `If the Electron MCP host implements call-mcp-tool in a newer build, this proxy will use it automatically.`,
+          `This proxy can call only live renderer handlers exported by the current Codex desktop build.`,
       },
     ],
   };
 }
 
 async function loadModules(config) {
-  const [dynamicTools, manager, appScope, vscodeApi] = await Promise.all([
+  const [dynamicTools, manager, appScope] = await Promise.all([
     import(config.assets.dynamicToolsUrl),
     import(config.assets.managerUrl),
     import(config.assets.appScopeUrl),
-    config.assets.vscodeApiUrl ? import(config.assets.vscodeApiUrl) : Promise.resolve(null),
   ]);
-  return { dynamicTools, manager, appScope, vscodeApi };
+  return { dynamicTools, manager, appScope };
 }
 
 function findScopeChain() {
