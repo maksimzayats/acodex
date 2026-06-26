@@ -17,6 +17,10 @@ from acodex.core.codex_app.runtime_dependencies import (
 
 APP_RESOURCE_URL_PREFIX = "app://-"
 DYNAMIC_IMPORT_FAILURE = "Failed to fetch dynamically imported module"
+INPUT_SCHEMA_KEY = "inputSchema"
+OBJECT_SCHEMA_TYPE = "object"
+PROPERTIES_KEY = "properties"
+TYPE_KEY = "type"
 
 
 class CodexAppBridgeSettings(BaseSettings):
@@ -48,7 +52,11 @@ class CodexAppBridge:
         if not isinstance(tools, list):
             return []
         tool_payloads = cast("list[Any]", tools)  # type: ignore[redundant-cast]
-        return [cast("dict[str, Any]", tool) for tool in tool_payloads if isinstance(tool, dict)]
+        return [
+            normalize_mcp_tool_descriptor(cast("dict[str, Any]", tool))
+            for tool in tool_payloads
+            if isinstance(tool, dict)
+        ]
 
     async def call_tool(
         self,
@@ -128,3 +136,25 @@ def normalize_tool_name(name: str) -> str:
     if name.startswith("codex_app__"):
         return name.removeprefix("codex_app__")
     return name
+
+
+def normalize_mcp_tool_descriptor(tool: dict[str, Any]) -> dict[str, Any]:
+    """Return a descriptor with an MCP Inspector-compatible input schema."""
+    return {
+        **tool,
+        INPUT_SCHEMA_KEY: normalize_mcp_input_schema(tool.get(INPUT_SCHEMA_KEY)),
+    }
+
+
+def normalize_mcp_input_schema(input_schema: Any) -> dict[str, Any]:
+    """Return an MCP-compatible object input schema."""
+    if not isinstance(input_schema, dict):
+        return {TYPE_KEY: OBJECT_SCHEMA_TYPE, PROPERTIES_KEY: {}}
+
+    schema = cast("dict[str, Any]", input_schema)
+    if schema.get(TYPE_KEY) == OBJECT_SCHEMA_TYPE:
+        return dict(schema)
+    return {
+        **schema,
+        TYPE_KEY: OBJECT_SCHEMA_TYPE,
+    }

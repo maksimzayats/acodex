@@ -213,7 +213,13 @@ def test_bridge_lists_and_calls_tools(monkeypatch: pytest.MonkeyPatch) -> None:
         evaluate_result=json.dumps(
             {
                 "ok": True,
-                "tools": [{"name": "codex_app.echo"}, "bad"],
+                "tools": [
+                    {
+                        "name": "codex_app.echo",
+                        "inputSchema": {"oneOf": [{"type": "object"}]},
+                    },
+                    "bad",
+                ],
                 "result": {"contentItems": [{"type": "inputText", "text": "ok"}]},
             },
         ),
@@ -236,7 +242,15 @@ def test_bridge_lists_and_calls_tools(monkeypatch: pytest.MonkeyPatch) -> None:
         _settings=CodexAppBridgeSettings(host_id="host", source_thread_id="thread"),
     )
 
-    assert run(app_bridge.list_tools()) == [{"name": "codex_app.echo"}]
+    assert run(app_bridge.list_tools()) == [
+        {
+            "name": "codex_app.echo",
+            "inputSchema": {
+                "oneOf": [{"type": "object"}],
+                "type": "object",
+            },
+        },
+    ]
     assert run(app_bridge.call_tool("codex_app__echo", {"value": 1})) == {
         "contentItems": [{"type": "inputText", "text": "ok"}],
     }
@@ -276,7 +290,12 @@ def test_bridge_rediscovers_assets_after_stale_import_failure(
         _settings=CodexAppBridgeSettings(),
     )
 
-    assert run(app_bridge.list_tools()) == [{"name": "codex_app.echo"}]
+    assert run(app_bridge.list_tools()) == [
+        {
+            "name": "codex_app.echo",
+            "inputSchema": {"type": "object", "properties": {}},
+        },
+    ]
     assert len(cdp.evaluations) == 2
     assert '"dynamicToolsUrl": "dynamic-1"' in cdp.evaluations[0][0]
     assert '"dynamicToolsUrl": "dynamic-2"' in cdp.evaluations[1][0]
@@ -334,6 +353,17 @@ def test_tool_name_normalization_and_renderer_expression() -> None:
     assert '"action": "listTools"' in expression
     assert "descriptorFactoryArgs" in BRIDGE_SCRIPT
     assert "runCodexAppMcpBridge" in expression
+
+
+def test_mcp_input_schema_normalization() -> None:
+    assert bridge.normalize_mcp_input_schema(None) == {
+        "type": "object",
+        "properties": {},
+    }
+    assert bridge.normalize_mcp_input_schema({"type": "object", "properties": {"x": {}}}) == {
+        "type": "object",
+        "properties": {"x": {}},
+    }
 
 
 def test_renderer_bridge_guards_function_source_probe_failures() -> None:

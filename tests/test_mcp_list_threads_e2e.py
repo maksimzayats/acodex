@@ -98,6 +98,7 @@ def test_mcp_tools_list_returns_live_read_only_tools(mcp_endpoint: str) -> None:
     tools = _tools_from_response(tools_response)
     tool_names = {tool["name"] for tool in tools if isinstance(tool.get("name"), str)}
     assert tool_names >= _READ_ONLY_TOOL_NAMES
+    assert all(tool["inputSchema"]["type"] == "object" for tool in tools)
 
 
 def test_mcp_tools_call_read_only_tools(mcp_endpoint: str) -> None:
