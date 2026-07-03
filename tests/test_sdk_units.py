@@ -261,14 +261,20 @@ def test_sdk_maps_mcp_protocol_errors() -> None:
     [CONNECTION_CLOSED, httpx.codes.REQUEST_TIMEOUT],
 )
 def test_sdk_maps_mcp_connection_codes(error_code: int) -> None:
+    exit_stack = FakeExitStack()
     fake_session = FakeSession(
         call_error=McpError(ErrorData(code=error_code, message="connection failed")),
     )
     client = AsyncAcodexClient(mcp_url="http://127.0.0.1:1/mcp")
     client._runtime._session = cast("Any", fake_session)
+    client._runtime._exit_stack = cast("Any", exit_stack)
 
     with pytest.raises(AcodexConnectionError, match="Could not call MCP tool"):
         run(client.call_tool("codex_app.echo"))
+
+    assert exit_stack.closed
+    assert client._runtime._session is None
+    assert client._runtime._exit_stack is None
 
 
 def test_sdk_maps_call_transport_errors() -> None:
@@ -282,6 +288,18 @@ def test_sdk_maps_call_transport_errors() -> None:
         run(client.call_tool("codex_app.echo"))
 
     assert exit_stack.closed
+    assert client._runtime._session is None
+    assert client._runtime._exit_stack is None
+
+
+def test_sdk_maps_call_transport_errors_without_exit_stack() -> None:
+    fake_session = FakeSession(call_error=httpx.ConnectError("offline"))
+    client = AsyncAcodexClient(mcp_url="http://127.0.0.1:1/mcp")
+    client._runtime._session = cast("Any", fake_session)
+
+    with pytest.raises(AcodexConnectionError, match="Could not call MCP tool"):
+        run(client.call_tool("codex_app.echo"))
+
     assert client._runtime._session is None
     assert client._runtime._exit_stack is None
 
@@ -361,14 +379,20 @@ def test_sdk_maps_list_tools_mcp_errors() -> None:
 
 
 def test_sdk_maps_list_tools_mcp_connection_errors() -> None:
+    exit_stack = FakeExitStack()
     fake_session = FakeSession(
         list_error=McpError(ErrorData(code=CONNECTION_CLOSED, message="closed")),
     )
     client = AsyncAcodexClient()
     client._runtime._session = cast("Any", fake_session)
+    client._runtime._exit_stack = cast("Any", exit_stack)
 
     with pytest.raises(AcodexConnectionError, match="Could not list MCP tools"):
         run(client.list_tools())
+
+    assert exit_stack.closed
+    assert client._runtime._session is None
+    assert client._runtime._exit_stack is None
 
 
 def test_sdk_maps_list_tools_transport_errors() -> None:
