@@ -619,3 +619,30 @@ def test_sdk_maps_internal_connect_cancellation_after_cleanup_error(
 
     with pytest.raises(AcodexConnectionError, match="offline"):
         run(AsyncAcodexClient().connect())
+
+
+def test_sdk_preserves_external_connect_cancellation_after_cleanup_error(
+    monkeypatch: Any,
+) -> None:
+    class RaisingExitStack:
+        async def aclose(self) -> None:
+            raise ExceptionGroup("transport failed", [httpx.ConnectError("offline")])
+
+    async def cancel_open_session(
+        self: McpSessionRuntime,
+        exit_stack: Any,
+    ) -> Any:
+        await asyncio.sleep(0)
+        self._session = cast("Any", object())
+        self._exit_stack = cast("Any", exit_stack)
+        raise asyncio.CancelledError
+
+    client = AsyncAcodexClient()
+    monkeypatch.setattr(runtime_module, "AsyncExitStack", RaisingExitStack)
+    monkeypatch.setattr(McpSessionRuntime, "_open_session", cancel_open_session)
+
+    with pytest.raises(asyncio.CancelledError):
+        run(client.connect())
+
+    assert client._runtime._session is None
+    assert client._runtime._exit_stack is None
