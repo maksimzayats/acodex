@@ -11,6 +11,7 @@ from mcp import ErrorData
 from mcp.shared.exceptions import McpError
 from mcp.types import CONNECTION_CLOSED, CallToolResult, ListToolsResult, TextContent, Tool
 
+import acodex.sdk._runtime as runtime_module
 from acodex.sdk import (
     AcodexConnectionError,
     AcodexResultError,
@@ -18,6 +19,7 @@ from acodex.sdk import (
     AsyncAcodexClient,
     ToolResult,
 )
+from acodex.sdk._runtime import McpSessionRuntime
 
 
 def run(coro: Any) -> Any:
@@ -161,7 +163,7 @@ def test_sdk_lists_tools_with_pagination() -> None:
         ],
     )
     client = AsyncAcodexClient()
-    client._session = cast("Any", fake_session)
+    client._runtime._session = cast("Any", fake_session)
 
     assert run(client.list_tools()) == [
         {"name": "codex_app.one", "inputSchema": {"type": "object"}},
@@ -183,7 +185,7 @@ def test_sdk_calls_tools_and_converts_json() -> None:
         ),
     )
     client = AsyncAcodexClient()
-    client._session = cast("Any", fake_session)
+    client._runtime._session = cast("Any", fake_session)
 
     assert run(client.call_json("codex_app.echo", {"value": 1})) == {"ok": True}
     assert fake_session.calls == [
@@ -200,7 +202,7 @@ def test_sdk_calls_tools_and_returns_text() -> None:
         call_result=CallToolResult(content=[TextContent(type="text", text="ok")]),
     )
     client = AsyncAcodexClient()
-    client._session = cast("Any", fake_session)
+    client._runtime._session = cast("Any", fake_session)
 
     assert run(client.call_text("codex_app.echo")) == "ok"
     assert fake_session.calls == [
@@ -220,7 +222,7 @@ def test_sdk_raises_for_tool_result_errors() -> None:
         ),
     )
     client = AsyncAcodexClient()
-    client._session = cast("Any", fake_session)
+    client._runtime._session = cast("Any", fake_session)
 
     with pytest.raises(AcodexToolError, match="tool failed") as exc_info:
         run(client.call_tool("codex_app.fail"))
@@ -232,7 +234,7 @@ def test_sdk_raises_for_tool_result_errors() -> None:
 def test_sdk_raises_generic_message_for_non_text_tool_errors() -> None:
     fake_session = FakeSession(call_result=CallToolResult(content=[], isError=True))
     client = AsyncAcodexClient()
-    client._session = cast("Any", fake_session)
+    client._runtime._session = cast("Any", fake_session)
 
     with pytest.raises(AcodexToolError, match="MCP tool returned an error"):
         run(client.call_tool("codex_app.fail"))
@@ -245,7 +247,7 @@ def test_sdk_maps_mcp_protocol_errors() -> None:
         ),
     )
     client = AsyncAcodexClient()
-    client._session = cast("Any", fake_session)
+    client._runtime._session = cast("Any", fake_session)
 
     with pytest.raises(AcodexToolError, match="bad params") as exc_info:
         run(client.call_tool("codex_app.fail"))
@@ -263,19 +265,86 @@ def test_sdk_maps_mcp_connection_codes(error_code: int) -> None:
         call_error=McpError(ErrorData(code=error_code, message="connection failed")),
     )
     client = AsyncAcodexClient(mcp_url="http://127.0.0.1:1/mcp")
-    client._session = cast("Any", fake_session)
+    client._runtime._session = cast("Any", fake_session)
 
     with pytest.raises(AcodexConnectionError, match="Could not call MCP tool"):
         run(client.call_tool("codex_app.echo"))
 
 
 def test_sdk_maps_call_transport_errors() -> None:
+    exit_stack = FakeExitStack()
     fake_session = FakeSession(call_error=httpx.ConnectError("offline"))
     client = AsyncAcodexClient(mcp_url="http://127.0.0.1:1/mcp")
-    client._session = cast("Any", fake_session)
+    client._runtime._session = cast("Any", fake_session)
+    client._runtime._exit_stack = cast("Any", exit_stack)
 
     with pytest.raises(AcodexConnectionError, match="Could not call MCP tool"):
         run(client.call_tool("codex_app.echo"))
+
+    assert exit_stack.closed
+    assert client._runtime._session is None
+    assert client._runtime._exit_stack is None
+
+
+def test_sdk_maps_cancelled_call_with_cleanup_transport_error() -> None:
+    exit_stack = FakeExitStack(
+        close_error=ExceptionGroup("transport failed", [httpx.ConnectError("offline")]),
+    )
+    fake_session = FakeSession(call_error=asyncio.CancelledError())
+    client = AsyncAcodexClient(mcp_url="http://127.0.0.1:1/mcp")
+    client._runtime._session = cast("Any", fake_session)
+    client._runtime._exit_stack = cast("Any", exit_stack)
+
+    with pytest.raises(AcodexConnectionError, match="offline"):
+        run(client.call_tool("codex_app.echo"))
+
+    assert exit_stack.closed
+    assert client._runtime._session is None
+    assert client._runtime._exit_stack is None
+
+
+def test_sdk_preserves_external_call_cancellation() -> None:
+    exit_stack = FakeExitStack()
+    fake_session = FakeSession(call_error=asyncio.CancelledError())
+    client = AsyncAcodexClient()
+    client._runtime._session = cast("Any", fake_session)
+    client._runtime._exit_stack = cast("Any", exit_stack)
+
+    with pytest.raises(asyncio.CancelledError):
+        run(client.call_tool("codex_app.echo"))
+
+    assert exit_stack.closed
+    assert client._runtime._session is None
+    assert client._runtime._exit_stack is None
+
+
+def test_sdk_maps_call_exception_groups() -> None:
+    fake_session = FakeSession(
+        call_error=ExceptionGroup("transport failed", [httpx.ConnectError("offline")]),
+    )
+    client = AsyncAcodexClient(mcp_url="http://127.0.0.1:1/mcp")
+    client._runtime._session = cast("Any", fake_session)
+    client._runtime._exit_stack = cast("Any", FakeExitStack())
+
+    with pytest.raises(AcodexConnectionError, match="offline"):
+        run(client.call_tool("codex_app.echo"))
+
+
+def test_sdk_preserves_non_transport_exception_groups() -> None:
+    exit_stack = FakeExitStack()
+    fake_session = FakeSession(
+        call_error=ExceptionGroup("tool failed", [ValueError("bad value")]),
+    )
+    client = AsyncAcodexClient()
+    client._runtime._session = cast("Any", fake_session)
+    client._runtime._exit_stack = cast("Any", exit_stack)
+
+    with pytest.raises(ExceptionGroup, match="tool failed"):
+        run(client.call_tool("codex_app.echo"))
+
+    assert exit_stack.closed
+    assert client._runtime._session is None
+    assert client._runtime._exit_stack is None
 
 
 def test_sdk_maps_list_tools_mcp_errors() -> None:
@@ -283,7 +352,7 @@ def test_sdk_maps_list_tools_mcp_errors() -> None:
         list_error=McpError(ErrorData(code=-32603, message="server failed")),
     )
     client = AsyncAcodexClient()
-    client._session = cast("Any", fake_session)
+    client._runtime._session = cast("Any", fake_session)
 
     with pytest.raises(AcodexToolError, match="server failed") as exc_info:
         run(client.list_tools())
@@ -296,18 +365,51 @@ def test_sdk_maps_list_tools_mcp_connection_errors() -> None:
         list_error=McpError(ErrorData(code=CONNECTION_CLOSED, message="closed")),
     )
     client = AsyncAcodexClient()
-    client._session = cast("Any", fake_session)
+    client._runtime._session = cast("Any", fake_session)
 
     with pytest.raises(AcodexConnectionError, match="Could not list MCP tools"):
         run(client.list_tools())
 
 
 def test_sdk_maps_list_tools_transport_errors() -> None:
+    exit_stack = FakeExitStack()
     fake_session = FakeSession(list_error=httpx.ConnectError("offline"))
     client = AsyncAcodexClient(mcp_url="http://127.0.0.1:1/mcp")
-    client._session = cast("Any", fake_session)
+    client._runtime._session = cast("Any", fake_session)
+    client._runtime._exit_stack = cast("Any", exit_stack)
 
     with pytest.raises(AcodexConnectionError, match="Could not reach"):
+        run(client.list_tools())
+
+    assert exit_stack.closed
+    assert client._runtime._session is None
+    assert client._runtime._exit_stack is None
+
+
+def test_sdk_preserves_external_list_tools_cancellation() -> None:
+    exit_stack = FakeExitStack()
+    fake_session = FakeSession(list_error=asyncio.CancelledError())
+    client = AsyncAcodexClient()
+    client._runtime._session = cast("Any", fake_session)
+    client._runtime._exit_stack = cast("Any", exit_stack)
+
+    with pytest.raises(asyncio.CancelledError):
+        run(client.list_tools())
+
+    assert exit_stack.closed
+    assert client._runtime._session is None
+    assert client._runtime._exit_stack is None
+
+
+def test_sdk_maps_list_tools_exception_groups() -> None:
+    fake_session = FakeSession(
+        list_error=ExceptionGroup("transport failed", [httpx.ConnectError("offline")]),
+    )
+    client = AsyncAcodexClient(mcp_url="http://127.0.0.1:1/mcp")
+    client._runtime._session = cast("Any", fake_session)
+    client._runtime._exit_stack = cast("Any", FakeExitStack())
+
+    with pytest.raises(AcodexConnectionError, match="offline"):
         run(client.list_tools())
 
 
@@ -324,37 +426,37 @@ def test_sdk_requires_connection_before_calls() -> None:
 def test_sdk_connect_and_close_are_idempotent() -> None:
     exit_stack = FakeExitStack()
     client = AsyncAcodexClient()
-    client._session = cast("Any", object())
-    client._exit_stack = cast("Any", exit_stack)
+    client._runtime._session = cast("Any", object())
+    client._runtime._exit_stack = cast("Any", exit_stack)
 
     run(client.connect())
     run(client.close())
     run(client.close())
 
     assert exit_stack.closed
-    assert client._session is None
-    assert client._exit_stack is None
+    assert client._runtime._session is None
+    assert client._runtime._exit_stack is None
 
 
 def test_sdk_close_clears_state_when_cleanup_fails() -> None:
     exit_stack = FakeExitStack(close_error=RuntimeError("cleanup failed"))
     client = AsyncAcodexClient()
-    client._session = cast("Any", object())
-    client._exit_stack = cast("Any", exit_stack)
+    client._runtime._session = cast("Any", object())
+    client._runtime._exit_stack = cast("Any", exit_stack)
 
     with pytest.raises(RuntimeError, match="cleanup failed"):
         run(client.close())
 
     assert exit_stack.closed
-    assert client._session is None
-    assert client._exit_stack is None
+    assert client._runtime._session is None
+    assert client._runtime._exit_stack is None
 
 
 def test_sdk_connect_serializes_concurrent_calls(monkeypatch: Any) -> None:
     opened_sessions = 0
 
     async def open_session(
-        self: AsyncAcodexClient,
+        self: McpSessionRuntime,
         _exit_stack: Any,
     ) -> Any:
         nonlocal opened_sessions
@@ -366,7 +468,7 @@ def test_sdk_connect_serializes_concurrent_calls(monkeypatch: Any) -> None:
         client = AsyncAcodexClient()
         await asyncio.gather(client.connect(), client.connect())
 
-    monkeypatch.setattr(AsyncAcodexClient, "_open_session", open_session)
+    monkeypatch.setattr(McpSessionRuntime, "_open_session", open_session)
 
     run(scenario())
 
@@ -375,21 +477,69 @@ def test_sdk_connect_serializes_concurrent_calls(monkeypatch: Any) -> None:
 
 def test_sdk_maps_connection_failures(monkeypatch: Any) -> None:
     async def fail_open_session(
-        self: AsyncAcodexClient,
+        self: McpSessionRuntime,
         _exit_stack: Any,
     ) -> None:
         await asyncio.sleep(0)
         raise httpx.ConnectError("offline")
 
-    monkeypatch.setattr(AsyncAcodexClient, "_open_session", fail_open_session)
+    monkeypatch.setattr(McpSessionRuntime, "_open_session", fail_open_session)
 
     with pytest.raises(AcodexConnectionError, match="Could not connect"):
         run(AsyncAcodexClient().connect())
 
 
+def test_sdk_preserves_connect_error_when_cleanup_fails(monkeypatch: Any) -> None:
+    class RaisingExitStack:
+        async def aclose(self) -> None:
+            raise RuntimeError("cleanup failed")
+
+    async def fail_open_session(
+        self: McpSessionRuntime,
+        _exit_stack: Any,
+    ) -> Any:
+        await asyncio.sleep(0)
+        self._session = cast("Any", object())
+        raise httpx.ConnectError("offline")
+
+    monkeypatch.setattr(runtime_module, "AsyncExitStack", RaisingExitStack)
+    monkeypatch.setattr(McpSessionRuntime, "_open_session", fail_open_session)
+
+    with pytest.raises(AcodexConnectionError, match="offline"):
+        run(AsyncAcodexClient().connect())
+
+
+def test_sdk_maps_connect_exception_groups(monkeypatch: Any) -> None:
+    async def fail_open_session(
+        _self: McpSessionRuntime,
+        _exit_stack: Any,
+    ) -> Any:
+        await asyncio.sleep(0)
+        raise ExceptionGroup("transport failed", [httpx.ConnectError("offline")])
+
+    monkeypatch.setattr(McpSessionRuntime, "_open_session", fail_open_session)
+
+    with pytest.raises(AcodexConnectionError, match="offline"):
+        run(AsyncAcodexClient().connect())
+
+
+def test_sdk_maps_connect_runtime_errors(monkeypatch: Any) -> None:
+    async def fail_open_session(
+        _self: McpSessionRuntime,
+        _exit_stack: Any,
+    ) -> Any:
+        await asyncio.sleep(0)
+        raise RuntimeError("unsupported protocol")
+
+    monkeypatch.setattr(McpSessionRuntime, "_open_session", fail_open_session)
+
+    with pytest.raises(AcodexConnectionError, match="unsupported protocol"):
+        run(AsyncAcodexClient().connect())
+
+
 def test_sdk_cleans_partial_session_after_connect_cancellation(monkeypatch: Any) -> None:
     async def cancel_open_session(
-        self: AsyncAcodexClient,
+        self: McpSessionRuntime,
         exit_stack: Any,
     ) -> Any:
         await asyncio.sleep(0)
@@ -398,10 +548,10 @@ def test_sdk_cleans_partial_session_after_connect_cancellation(monkeypatch: Any)
         raise asyncio.CancelledError
 
     client = AsyncAcodexClient()
-    monkeypatch.setattr(AsyncAcodexClient, "_open_session", cancel_open_session)
+    monkeypatch.setattr(McpSessionRuntime, "_open_session", cancel_open_session)
 
     with pytest.raises(asyncio.CancelledError):
         run(client.connect())
 
-    assert client._session is None
-    assert client._exit_stack is None
+    assert client._runtime._session is None
+    assert client._runtime._exit_stack is None
