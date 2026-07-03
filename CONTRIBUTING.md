@@ -157,6 +157,8 @@ Keep responsibilities narrow and explicit:
 - `src/acodex/core/mcp_tools.py`: small JSON-RPC client used by the CLI to call
   the managed MCP server.
 - `src/acodex/http/`: FastAPI routes and MCP JSON-RPC request handling.
+- `src/acodex/sdk/`: public Python SDK over a configured MCP endpoint. It hides
+  MCP session setup and result parsing for external integrations.
 - `src/acodex/ioc/`: dependency injection container registration.
 - `tests/`: unit, CLI, HTTP, MCP, and opt-in integration coverage.
 
@@ -182,9 +184,11 @@ responsibility.
 
 Architecture contracts are enforced by import-linter:
 
-- `core` must not import CLI, HTTP, or dependency wiring.
-- `http` must not import CLI and may touch dependency wiring only from the app
-  entrypoint.
+- `core` must not import CLI, HTTP, SDK, or dependency wiring.
+- `http` must not import CLI, SDK, or dependency wiring, and may touch wiring
+  only from the app entrypoint.
+- `sdk` must not import CLI, HTTP, core Codex bridge internals, or dependency
+  wiring.
 - `cli` must not import HTTP transport.
 - Only process entrypoints may import dependency containers.
 

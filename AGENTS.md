@@ -2,12 +2,13 @@
 
 - Keep new features split by responsibility: CLI presentation in `cli`, HTTP
   transport in `http`, Codex desktop bridging in `core/codex_app`, MCP client
-  logic in `core/mcp_tools.py`, and dependency wiring in `ioc`.
+  logic in `core/mcp_tools.py`, public remote integration in `sdk`, and
+  dependency wiring in `ioc`.
 - Use dependency injection for shared services and I/O boundaries. Register
   reusable collaborators in the container instead of constructing them ad hoc.
 - Keep dependency wiring behind process entrypoints. Do not import `ioc` from
-  feature modules, and do not make `cli`, `http`, or `core` depend on each other
-  across the enforced import-linter boundaries.
+  feature modules, and do not make `cli`, `http`, `core`, or `sdk` depend on
+  each other across the enforced import-linter boundaries.
 - Prefer focused classes or dataclasses for main feature logic, especially when
   dependencies, state, lifecycle, or test seams are involved. Keep standalone
   functions for small pure helpers and simple transformations.

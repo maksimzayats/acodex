@@ -15,6 +15,7 @@ dependencies = [
     { name = "diwire" },
     { name = "fastapi", extra = ["standard"] },
     { name = "fastmcp" },
+    { name = "mcp" },
     { name = "pydantic-settings" },
     { name = "rich" },
     { name = "typer" },
@@ -26,7 +27,6 @@ dependencies = [
 dev = [
     { name = "codespell" },
     { name = "import-linter" },
-    { name = "mcp" },
     { name = "mypy" },
     { name = "prek" },
     { name = "pydantic", marker = "python_full_version < '3.15'" },
@@ -44,6 +44,7 @@ requires-dist = [
     { name = "diwire", specifier = ">=1.4.2" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.138.0" },
     { name = "fastmcp", specifier = ">=3.4.2" },
+    { name = "mcp", specifier = ">=1.27.2,<2" },
     { name = "pydantic-settings", specifier = ">=2.14.1" },
     { name = "rich", specifier = ">=15.0.0" },
     { name = "typer", specifier = ">=0.26.7" },
@@ -55,7 +56,6 @@ requires-dist = [
 dev = [
     { name = "codespell", specifier = ">=2.4,<3" },
     { name = "import-linter", specifier = ">=2.10,<3" },
-    { name = "mcp", specifier = ">=1.27.2" },
     { name = "mypy", specifier = ">=1.19.1" },
     { name = "prek", specifier = ">=0.3.2" },
     { name = "pydantic", marker = "python_full_version < '3.15'", specifier = ">=2" },

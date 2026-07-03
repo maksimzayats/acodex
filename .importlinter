@@ -12,17 +12,30 @@ forbidden_modules =
   acodex.cli
   acodex.http
   acodex.ioc
+  acodex.sdk
 
 [importlinter:contract:http-independence]
-name = HTTP transport must not depend on CLI or wiring
+name = HTTP transport must not depend on CLI, SDK, or wiring
 type = forbidden
 source_modules =
   acodex.http
 forbidden_modules =
   acodex.cli
   acodex.ioc
+  acodex.sdk
 ignore_imports =
   acodex.http.app -> acodex.ioc.http
+
+[importlinter:contract:sdk-independence]
+name = SDK must not depend on app internals or wiring
+type = forbidden
+source_modules =
+  acodex.sdk
+forbidden_modules =
+  acodex.cli
+  acodex.core
+  acodex.http
+  acodex.ioc
 
 [importlinter:contract:cli-independence]
 name = CLI must not import HTTP transport
@@ -40,6 +53,7 @@ source_modules =
   acodex.config
   acodex.core
   acodex.http
+  acodex.sdk
 forbidden_modules =
   acodex.ioc
 ignore_imports =
