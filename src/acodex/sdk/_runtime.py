@@ -65,8 +65,10 @@ class McpSessionRuntime:
                 await self._raise_open_error(exit_stack, exc)
             except self.open_connection_errors as exc:
                 await self._raise_open_error(exit_stack, exc)
-            except asyncio.CancelledError:
-                await self._clear_after_failed_open(exit_stack)
+            except asyncio.CancelledError as exc:
+                cleanup_exc = await self._clear_after_failed_open(exit_stack)
+                if cleanup_exc is not None and _is_internal_cancel(exc):
+                    _raise_connect_error(self.mcp_url, cleanup_exc)
                 raise
 
     async def close(self) -> None:
@@ -173,9 +175,7 @@ class McpSessionRuntime:
     ) -> NoReturn:
         cleanup_exc = await self._clear_after_failed_open(exit_stack)
         connection_exc = _connection_cause(exc) or cleanup_exc or exc
-        raise AcodexConnectionError(
-            f"Could not connect to acodex MCP server at {self.mcp_url}: {connection_exc}",
-        ) from connection_exc
+        _raise_connect_error(self.mcp_url, connection_exc)
 
     async def _raise_base_operation_error(
         self,
@@ -183,6 +183,8 @@ class McpSessionRuntime:
         exc: BaseException,
     ) -> NoReturn:
         cleanup_exc = await self._close_failed_session()
+        if isinstance(exc, asyncio.CancelledError) and not _is_internal_cancel(exc):
+            raise exc
         connection_exc = cleanup_exc or _connection_cause(exc)
         if connection_exc is not None:
             raise AcodexConnectionError(f"{message}: {connection_exc}") from connection_exc
@@ -200,6 +202,16 @@ class McpSessionRuntime:
 
 def _is_mcp_connection_error(exc: McpError) -> bool:
     return exc.error.code in McpSessionRuntime.connection_error_codes
+
+
+def _raise_connect_error(mcp_url: str, exc: BaseException) -> NoReturn:
+    raise AcodexConnectionError(
+        f"Could not connect to acodex MCP server at {mcp_url}: {exc}",
+    ) from exc
+
+
+def _is_internal_cancel(exc: asyncio.CancelledError) -> bool:
+    return "cancel scope" in str(exc)
 
 
 def _connection_cause(exc: BaseException) -> BaseException | None:

@@ -304,11 +304,30 @@ def test_sdk_maps_call_transport_errors_without_exit_stack() -> None:
     assert client._runtime._exit_stack is None
 
 
-def test_sdk_maps_cancelled_call_with_cleanup_transport_error() -> None:
+def test_sdk_preserves_cancelled_call_with_cleanup_transport_error() -> None:
     exit_stack = FakeExitStack(
         close_error=ExceptionGroup("transport failed", [httpx.ConnectError("offline")]),
     )
     fake_session = FakeSession(call_error=asyncio.CancelledError())
+    client = AsyncAcodexClient(mcp_url="http://127.0.0.1:1/mcp")
+    client._runtime._session = cast("Any", fake_session)
+    client._runtime._exit_stack = cast("Any", exit_stack)
+
+    with pytest.raises(asyncio.CancelledError):
+        run(client.call_tool("codex_app.echo"))
+
+    assert exit_stack.closed
+    assert client._runtime._session is None
+    assert client._runtime._exit_stack is None
+
+
+def test_sdk_maps_internal_cancelled_call_with_cleanup_transport_error() -> None:
+    exit_stack = FakeExitStack(
+        close_error=ExceptionGroup("transport failed", [httpx.ConnectError("offline")]),
+    )
+    fake_session = FakeSession(
+        call_error=asyncio.CancelledError("Cancelled via cancel scope 1"),
+    )
     client = AsyncAcodexClient(mcp_url="http://127.0.0.1:1/mcp")
     client._runtime._session = cast("Any", fake_session)
     client._runtime._exit_stack = cast("Any", exit_stack)
@@ -579,3 +598,24 @@ def test_sdk_cleans_partial_session_after_connect_cancellation(monkeypatch: Any)
 
     assert client._runtime._session is None
     assert client._runtime._exit_stack is None
+
+
+def test_sdk_maps_internal_connect_cancellation_after_cleanup_error(
+    monkeypatch: Any,
+) -> None:
+    class RaisingExitStack:
+        async def aclose(self) -> None:
+            raise ExceptionGroup("transport failed", [httpx.ConnectError("offline")])
+
+    async def cancel_open_session(
+        _self: McpSessionRuntime,
+        _exit_stack: Any,
+    ) -> Any:
+        await asyncio.sleep(0)
+        raise asyncio.CancelledError("Cancelled via cancel scope 1")
+
+    monkeypatch.setattr(runtime_module, "AsyncExitStack", RaisingExitStack)
+    monkeypatch.setattr(McpSessionRuntime, "_open_session", cancel_open_session)
+
+    with pytest.raises(AcodexConnectionError, match="offline"):
+        run(AsyncAcodexClient().connect())
