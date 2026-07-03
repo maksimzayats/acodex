@@ -31,7 +31,7 @@ TRANSPORT_ERRORS: ErrorTypes = (
     TimeoutError,
 )
 SESSION_ERRORS: ErrorTypes = (*TRANSPORT_ERRORS, McpError)
-MCP_CONNECTION_ERROR_CODES = frozenset({CONNECTION_CLOSED, httpx.codes.REQUEST_TIMEOUT})
+MCP_CONNECTION_ERROR_CODES = frozenset((CONNECTION_CLOSED, httpx.codes.REQUEST_TIMEOUT))
 
 
 @dataclass(kw_only=True, slots=True)

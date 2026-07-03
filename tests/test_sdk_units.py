@@ -291,6 +291,26 @@ def test_sdk_maps_list_tools_mcp_errors() -> None:
     assert exc_info.value.code == -32603
 
 
+def test_sdk_maps_list_tools_mcp_connection_errors() -> None:
+    fake_session = FakeSession(
+        list_error=McpError(ErrorData(code=CONNECTION_CLOSED, message="closed")),
+    )
+    client = AsyncAcodexClient()
+    client._session = cast("Any", fake_session)
+
+    with pytest.raises(AcodexConnectionError, match="Could not list MCP tools"):
+        run(client.list_tools())
+
+
+def test_sdk_maps_list_tools_transport_errors() -> None:
+    fake_session = FakeSession(list_error=httpx.ConnectError("offline"))
+    client = AsyncAcodexClient(mcp_url="http://127.0.0.1:1/mcp")
+    client._session = cast("Any", fake_session)
+
+    with pytest.raises(AcodexConnectionError, match="Could not reach"):
+        run(client.list_tools())
+
+
 def test_sdk_requires_connection_before_calls() -> None:
     with pytest.raises(AcodexConnectionError, match="not connected"):
         run(AsyncAcodexClient().list_tools())
