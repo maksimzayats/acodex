@@ -26,7 +26,7 @@ your Codex desktop build exposes.
 
 Prerequisites:
 
-- Python 3.10 or newer.
+- Python 3.11 or newer.
 - `uv`; see the [official install guide](https://docs.astral.sh/uv/getting-started/installation/).
 - macOS with Codex.app installed. The relaunch flow expects
   `/Applications/Codex.app` by default; set `ACODEX_CODEX_APP_PATH` if yours is
@@ -94,6 +94,11 @@ acodex tools call --output json codex_app.list_threads --limit 5
 
 Use the SDK when another Python process should call acodex, such as a Telegram
 bot, local service, or automation script:
+
+```sh
+uv add acodex
+# or: pip install acodex
+```
 
 ```python
 import asyncio

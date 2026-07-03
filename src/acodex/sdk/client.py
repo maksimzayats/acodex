@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -9,7 +10,13 @@ import httpx
 from mcp import ClientSession
 from mcp.client.streamable_http import StreamableHTTPError, streamable_http_client
 from mcp.shared.exceptions import McpError
-from mcp.types import Implementation, ListToolsResult, PaginatedRequestParams, Tool
+from mcp.types import (
+    CONNECTION_CLOSED,
+    Implementation,
+    ListToolsResult,
+    PaginatedRequestParams,
+    Tool,
+)
 
 from acodex.sdk.errors import AcodexConnectionError, AcodexResultError, AcodexToolError
 from acodex.sdk.models import DEFAULT_MCP_URL, DEFAULT_TIMEOUT, ToolResult
@@ -22,9 +29,9 @@ TRANSPORT_ERRORS: ErrorTypes = (
     httpx.HTTPError,
     OSError,
     TimeoutError,
-    RuntimeError,
 )
 SESSION_ERRORS: ErrorTypes = (*TRANSPORT_ERRORS, McpError)
+MCP_CONNECTION_ERROR_CODES = frozenset({CONNECTION_CLOSED, httpx.codes.REQUEST_TIMEOUT})
 
 
 @dataclass(kw_only=True, slots=True)
@@ -34,6 +41,7 @@ class AsyncAcodexClient:
     mcp_url: str = DEFAULT_MCP_URL
     timeout: float = DEFAULT_TIMEOUT
     _exit_stack: AsyncExitStack | None = field(default=None, init=False)
+    _lifecycle_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False)
     _session: ClientSession | None = field(default=None, init=False)
 
     async def __aenter__(self) -> Self:
@@ -45,24 +53,32 @@ class AsyncAcodexClient:
 
     async def connect(self) -> None:
         """Open and initialize the MCP client session."""
-        if self._session is not None:
-            return
+        async with self._lifecycle_lock:
+            if self._session is not None:
+                return
 
-        exit_stack = AsyncExitStack()
-        try:
-            await self._open_session(exit_stack)
-        except SESSION_ERRORS as exc:
-            await exit_stack.aclose()
-            self._clear_session()
-            raise AcodexConnectionError(
-                f"Could not connect to acodex MCP server at {self.mcp_url}: {exc}",
-            ) from exc
+            exit_stack = AsyncExitStack()
+            try:
+                self._session = await self._open_session(exit_stack)
+                self._exit_stack = exit_stack
+            except SESSION_ERRORS as exc:
+                await exit_stack.aclose()
+                self._clear_session()
+                raise AcodexConnectionError(
+                    f"Could not connect to acodex MCP server at {self.mcp_url}: {exc}",
+                ) from exc
+            except BaseException:
+                await exit_stack.aclose()
+                self._clear_session()
+                raise
 
     async def close(self) -> None:
         """Close the MCP client session."""
-        if self._exit_stack is not None:
-            await self._exit_stack.aclose()
-        self._clear_session()
+        async with self._lifecycle_lock:
+            exit_stack = self._exit_stack
+            self._clear_session()
+            if exit_stack is not None:
+                await exit_stack.aclose()
 
     async def list_tools(self) -> list[dict[str, Any]]:
         """Return tool descriptors exposed by the acodex MCP server."""
@@ -81,13 +97,18 @@ class AsyncAcodexClient:
         arguments: dict[str, Any] | None = None,
     ) -> ToolResult:
         """Call an MCP tool and return a parsed SDK result."""
+        session = self._session_or_raise()
         try:
-            result = await self._session_or_raise().call_tool(
+            result = await session.call_tool(
                 name,
                 arguments or {},
                 read_timeout_seconds=timedelta(seconds=self.timeout),
             )
         except McpError as exc:
+            if _is_mcp_connection_error(exc):
+                raise AcodexConnectionError(
+                    f"Could not call MCP tool {name!r} at {self.mcp_url}: {exc}",
+                ) from exc
             raise AcodexToolError(
                 str(exc),
                 code=exc.error.code,
@@ -119,7 +140,7 @@ class AsyncAcodexClient:
         """Call a tool and return a JSON object from structured or text content."""
         return (await self.call_tool(name, arguments)).json_object()
 
-    async def _open_session(self, exit_stack: AsyncExitStack) -> None:
+    async def _open_session(self, exit_stack: AsyncExitStack) -> ClientSession:
         http_client = await exit_stack.enter_async_context(
             httpx.AsyncClient(timeout=self.timeout),
         )
@@ -132,17 +153,24 @@ class AsyncAcodexClient:
             read_timeout_seconds=timedelta(seconds=self.timeout),
             client_info=Implementation(name=SDK_CLIENT_NAME, version=SDK_CLIENT_VERSION),
         )
-        self._session = await exit_stack.enter_async_context(session)
-        self._exit_stack = exit_stack
-        await self._session.initialize()
+        initialized_session = await exit_stack.enter_async_context(session)
+        await initialized_session.initialize()
+        return initialized_session
 
     async def _list_tools_page(self, cursor: str | None) -> ListToolsResult:
+        session = self._session_or_raise()
         try:
-            return await self._session_or_raise().list_tools(
+            return await session.list_tools(
                 params=PaginatedRequestParams(cursor=cursor),
             )
         except McpError as exc:
-            raise AcodexConnectionError(f"Could not list MCP tools: {exc}") from exc
+            if _is_mcp_connection_error(exc):
+                raise AcodexConnectionError(f"Could not list MCP tools: {exc}") from exc
+            raise AcodexToolError(
+                str(exc),
+                code=exc.error.code,
+                data=exc.error.data,
+            ) from exc
         except TRANSPORT_ERRORS as exc:
             raise AcodexConnectionError(
                 f"Could not reach acodex MCP server at {self.mcp_url}: {exc}",
@@ -169,3 +197,7 @@ def _tool_error_message(tool_result: ToolResult) -> str:
         return tool_result.text()
     except AcodexResultError:
         return "MCP tool returned an error"
+
+
+def _is_mcp_connection_error(exc: McpError) -> bool:
+    return exc.error.code in MCP_CONNECTION_ERROR_CODES

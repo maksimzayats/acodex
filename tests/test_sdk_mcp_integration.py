@@ -14,13 +14,14 @@ import pytest
 import uvicorn
 from diwire import Container, resolver_context
 from fastapi import FastAPI
+from mcp.types import INVALID_PARAMS
 
 from acodex.core.codex_app.bridge import CodexAppBridge
 from acodex.http import app as app_module
 from acodex.http.mcp.constants import MCP_PROTOCOL_VERSION
 from acodex.http.mcp.handler import MCPRequestsHandler
 from acodex.http.mcp.routes import mcp_router
-from acodex.sdk import AsyncAcodexClient
+from acodex.sdk import AcodexToolError, AsyncAcodexClient
 
 LOCAL_HOST = "127.0.0.1"
 SERVER_STARTUP_TIMEOUT = 10.0
@@ -45,6 +46,11 @@ class FakeBridge:
                     "properties": {"value": {"type": "integer"}},
                 },
             },
+            {
+                "name": "codex_app.fail",
+                "description": "Return an MCP tool error result.",
+                "inputSchema": {"type": "object"},
+            },
         ]
 
     async def call_tool(
@@ -54,6 +60,16 @@ class FakeBridge:
     ) -> dict[str, Any]:
         tool_arguments = arguments or {}
         self.calls.append((name, tool_arguments))
+        if name == "codex_app.fail":
+            return {
+                "success": False,
+                "contentItems": [
+                    {
+                        "type": "inputText",
+                        "text": "bridge failed",
+                    },
+                ],
+            }
         return {
             "contentItems": [
                 {
@@ -124,11 +140,32 @@ def test_sdk_uses_official_mcp_client_against_acodex_mcp_route(
                     "properties": {"value": {"type": "integer"}},
                 },
             },
+            {
+                "name": "codex_app.fail",
+                "description": "Return an MCP tool error result.",
+                "inputSchema": {"type": "object"},
+            },
         ]
         assert payload == {
             "name": "codex_app.echo",
             "arguments": {"value": 42},
         }
+
+    run(scenario())
+
+
+def test_sdk_maps_mcp_route_error_responses(mcp_endpoint: str) -> None:
+    async def scenario() -> None:
+        async with AsyncAcodexClient(mcp_url=mcp_endpoint) as client:
+            with pytest.raises(AcodexToolError, match="bridge failed") as tool_error:
+                await client.call_tool("codex_app.fail")
+
+            with pytest.raises(AcodexToolError, match="non-empty string") as params_error:
+                await client.call_tool("")
+
+        assert tool_error.value.result is not None
+        assert tool_error.value.result.text() == "bridge failed"
+        assert params_error.value.code == INVALID_PARAMS
 
     run(scenario())
 

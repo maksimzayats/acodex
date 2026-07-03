@@ -187,9 +187,9 @@ Architecture contracts are enforced by import-linter:
 - `core` must not import CLI, HTTP, SDK, or dependency wiring.
 - `http` must not import CLI, SDK, or dependency wiring, and may touch wiring
   only from the app entrypoint.
-- `sdk` must not import CLI, HTTP, core Codex bridge internals, or dependency
-  wiring.
-- `cli` must not import HTTP transport.
+- `sdk` must not import CLI, HTTP, config, core Codex bridge internals, or
+  dependency wiring.
+- `cli` must not import HTTP transport or SDK.
 - Only process entrypoints may import dependency containers.
 
 ## Pull Request Checklist
