@@ -17,6 +17,8 @@ your Codex desktop build exposes.
   running desktop renderer without writing CDP plumbing.
 - **MCP-compatible local server.** Expose Codex desktop tools at `/mcp` for
   local automation clients.
+- **Python SDK.** Connect a bot, script, or service to an acodex MCP endpoint
+  without writing MCP session or result-parsing code.
 - **Practical CLI workflow.** Check configuration, relaunch Codex with CDP,
   manage the bridge server, and call tools from a terminal.
 
@@ -24,7 +26,7 @@ your Codex desktop build exposes.
 
 Prerequisites:
 
-- Python 3.10 or newer.
+- Python 3.11 or newer.
 - `uv`; see the [official install guide](https://docs.astral.sh/uv/getting-started/installation/).
 - macOS with Codex.app installed. The relaunch flow expects
   `/Applications/Codex.app` by default; set `ACODEX_CODEX_APP_PATH` if yours is
@@ -87,6 +89,35 @@ acodex tools call codex_app.list_threads --limit=5
 acodex tools call --args-json '{"limit":5}' codex_app.list_threads
 acodex tools call --output json codex_app.list_threads --limit 5
 ```
+
+## Python SDK
+
+Use the SDK when another Python process should call acodex, such as a Telegram
+bot, local service, or automation script:
+
+```sh
+uv add acodex
+# or: pip install acodex
+```
+
+```python
+import asyncio
+
+from acodex.sdk import AsyncAcodexClient
+
+
+async def main() -> None:
+    async with AsyncAcodexClient(mcp_url="http://127.0.0.1:45218/mcp") as client:
+        threads = await client.call_json("codex_app.list_threads", {"limit": 5})
+        print(threads["threads"])
+
+
+asyncio.run(main())
+```
+
+The SDK uses MCP over HTTP and keeps the server local-first. If you pass a
+non-local `mcp_url`, expose it through your own secure tunnel or proxy; acodex
+v1 does not add remote authentication.
 
 ## Configuration
 
