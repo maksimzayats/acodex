@@ -959,8 +959,8 @@ resolution-markers = [
     "python_full_version < '3.13'",
 ]
 dependencies = [
-    { name = "certifi", marker = "python_full_version < '3.15'" },
-    { name = "h11", version = "0.14.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.15'" },
+    { name = "certifi" },
+    { name = "h11", version = "0.14.0", source = { registry = "https://pypi.org/simple" } },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/9f/45/ad3e1b4d448f22c0cff4f5692f5ed0666658578e358b8d58a19846048059/httpcore-1.0.8.tar.gz", hash = "sha256:86e94505ed24ea06514883fd44d2bc02d90e77e7979c8eb71b90f41d364a1bad", size = 85385, upload-time = "2025-04-11T14:42:46.661Z" }
 wheels = [
@@ -975,8 +975,8 @@ resolution-markers = [
     "python_full_version >= '3.15'",
 ]
 dependencies = [
-    { name = "certifi", marker = "python_full_version >= '3.15'" },
-    { name = "h11", version = "0.16.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.15'" },
+    { name = "certifi" },
+    { name = "h11", version = "0.16.0", source = { registry = "https://pypi.org/simple" } },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/06/94/82699a10bca87a5556c9c59b5963f2d039dbd239f25bc2a63907a05a14cb/httpcore-1.0.9.tar.gz", hash = "sha256:6e34463af53fd2ab5d807f399a9b45ea31c3dfa2276f15a2c3f00afff6e176e8", size = 85484, upload-time = "2025-04-24T22:06:22.219Z" }
 wheels = [
@@ -1080,7 +1080,7 @@ name = "importlib-metadata"
 version = "9.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "zipp", marker = "python_full_version < '3.13'" },
+    { name = "zipp" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a9/01/15bb152d77b21318514a96f43af312635eb2500c96b55398d020c93d86ea/importlib_metadata-9.0.0.tar.gz", hash = "sha256:a4f57ab599e6a2e3016d7595cfd72eb4661a5106e787a95bcc90c7105b831efc", size = 56405, upload-time = "2026-03-20T06:42:56.999Z" }
 wheels = [
@@ -2777,16 +2777,16 @@ wheels = [
 
 [[package]]
 name = "wemake-python-styleguide"
-version = "1.7.0"
+version = "1.7.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "attrs" },
     { name = "flake8" },
     { name = "pygments" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f4/e9/0699a5401f20105ea9ad5ef52f6609ffe59ce01b4becac8cdf004c47d140/wemake_python_styleguide-1.7.0.tar.gz", hash = "sha256:d7af4d971064b8998467fecf3164bc74331974a38ab5e8aee2fe67ddbcb680fd", size = 160196, upload-time = "2026-07-26T09:13:04.181Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/81/9c/ac8ffa2edee50d6ab051562314bece3654c76d5510eff011c49403f8d582/wemake_python_styleguide-1.7.1.tar.gz", hash = "sha256:4703dc96864e324d83308f77bcd921446cba3c160bc2782d413d8a7205072107", size = 160237, upload-time = "2026-07-31T14:28:52.832Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/72/90/deed66bba45fd966db6919c46ba491d99300eb0438bff01577095b2f8eff/wemake_python_styleguide-1.7.0-py3-none-any.whl", hash = "sha256:afec09f29e86fa5ce758d5279cd0a5d261982fa156fbf4f8192e387e64e259e1", size = 224044, upload-time = "2026-07-26T09:13:05.38Z" },
+    { url = "https://files.pythonhosted.org/packages/ac/fa/878cff9dca9a0998086784704f861250d60233cac8961a7b522fae1fc1ed/wemake_python_styleguide-1.7.1-py3-none-any.whl", hash = "sha256:5e7d077e564d9cfb01e777be7b9bddd37843f6b26a8597af3ccd3e931ddfab08", size = 224060, upload-time = "2026-07-31T14:28:54.108Z" },
 ]
 
 [[package]]
