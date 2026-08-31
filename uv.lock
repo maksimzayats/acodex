@@ -1096,7 +1096,7 @@ wheels = [
 
 [[package]]
 name = "import-linter"
-version = "2.12"
+version = "2.14"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -1104,9 +1104,9 @@ dependencies = [
     { name = "rich" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/23/a7/5ae6dc1caf8229f9bcd05b0dd71aba6d5b699b81e5d599fd05bb36046e2a/import_linter-2.12.tar.gz", hash = "sha256:217f0f0f0890b8625389765039d52c215f4c6d4a047f42ea78b6d00ceba1900e", size = 1173831, upload-time = "2026-06-23T08:58:35.313Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/54/ee/709dfd34cd2729b6d2dfa1381fd3c1370e0e3e5d4ce7d0643fd8c12652c1/import_linter-2.14.tar.gz", hash = "sha256:8e6304d9a9ddfbd39f6ac990710d95aaf9ac71eb1ba81ac8ce53e1ef2f9773d3", size = 1283529, upload-time = "2026-08-28T11:28:36.511Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/00/2b/3d9ff17662d01aa83fad076f4881d95136c72781b6b7ef8bf0464a5037a7/import_linter-2.12-py3-none-any.whl", hash = "sha256:b346eeb30cabd5b0630773d42cca4eac8dd459ac5d507ac2ecadc3f99462f231", size = 637947, upload-time = "2026-06-23T08:58:33.969Z" },
+    { url = "https://files.pythonhosted.org/packages/7c/f1/a9ef72a7ad4a49e77e4df579dd23e2bbf84f1b7da9087a744b086657929e/import_linter-2.14-py3-none-any.whl", hash = "sha256:0039771a991f9a309055ac6fa18340b0024d0bb88722f9dd2834f0d930a2224c", size = 639603, upload-time = "2026-08-28T11:28:35.091Z" },
 ]
 
 [[package]]
